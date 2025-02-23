@@ -18,8 +18,14 @@ const MODEL_DEEPSEEK: &str = "deepseek-chat";
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 struct Cli {
+    /// The model to use (default: gemini-2.0-flash)
+    #[arg(short, long, default_value = DEFAULT_MODEL)]
+    model: String,
+    /// Enable streaming output
+    #[arg(short, long)]
+    stream: bool,
     #[command(subcommand)]
-    command: Commands,
+    command: Option<Commands>, // Make subcommand optional
 }
 
 #[derive(Subcommand)]
@@ -28,24 +34,9 @@ enum Commands {
     ListModels,
     /// Run in single query mode
     Query {
-        /// The model to use (default: gemini-2.0-flash)
-        #[arg(short, long, default_value = DEFAULT_MODEL)]
-        model: String,
         /// The question to ask
         #[arg(short, long)]
         question: String,
-        /// Enable streaming output
-        #[arg(short, long)]
-        stream: bool,
-    },
-    /// Run in interactive mode
-    Interactive {
-        /// The model to use (default: gemini-2.0-flash)
-        #[arg(short, long, default_value = DEFAULT_MODEL)]
-        model: String,
-        /// Enable streaming output
-        #[arg(short, long)]
-        stream: bool,
     },
 }
 
@@ -75,13 +66,10 @@ impl ChatSession {
             let mut full_content = String::new();
             let chat_stream = client.exec_chat_stream(&self.model, chat_req, None).await?;
             let options = PrintChatStreamOptions::from_print_events(false);
-            //let mut stream = print_chat_stream(chat_stream, Some(&options));
-            
             let response = print_chat_stream(chat_stream, Some(&options)).await;
 
             match response {
                 Ok(content) => {
-                    //print!("{}", content);
                     full_content.push_str(&content);
                 }
                 Err(e) => {
@@ -178,24 +166,33 @@ async fn interactive_mode(
 ) -> Result<(), Box<dyn std::error::Error>> {
     validate_model(model)?;
 
-    println!("Interactive Mode (type 'exit' to quit, 'clear' to reset conversation)");
-    println!("Using model: {}", model);
+    println!("Interactive Mode (type 'q' to quit, '/help' for help)");
+    // color yellow for model name
+    println!("Using Model: \x1b[33m{}\x1b[0m", model);
 
     let mut session = ChatSession::new(model.to_string(), stream);
 
     loop {
-        print!("\nEnter your question: ");
+        print!("User: ");
         io::stdout().flush()?;
 
         let mut input = String::new();
         io::stdin().read_line(&mut input)?;
         let question = input.trim();
 
+        // Add q for quit 
+        if question == "q" {
+            break;
+        }
+
+        if question.is_empty() {
+            continue;
+        }
+
         if question.starts_with("/") {
             let parts: Vec<&str> = question.splitn(2, ' ').collect();
             match parts[0] {
                 "/quit" | "/bye" => {
-                    println!("Exiting interactive mode...");
                     break;
                 }
                 "/system" => {
@@ -227,7 +224,6 @@ async fn interactive_mode(
         }
     }
 
-    println!("Exiting interactive mode");
     Ok(())
 }
 
@@ -236,15 +232,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
     let client = Client::default();
 
-    match &cli.command {
-        Commands::ListModels => {
+    match cli.command {
+        Some(Commands::ListModels) => {
             list_models(&client).await?;
         }
-        Commands::Query { model, question, stream } => {
-            execute_query(&client, model, question, *stream).await?;
+        Some(Commands::Query { question }) => {
+            execute_query(&client, &cli.model, &question, cli.stream).await?;
         }
-        Commands::Interactive { model, stream } => {
-            interactive_mode(&client, model, *stream).await?;
+        None => {
+            // Default to interactive mode if no subcommand is provided
+            interactive_mode(&client, &cli.model, cli.stream).await?;
         }
     }
 
