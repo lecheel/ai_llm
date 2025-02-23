@@ -18,7 +18,6 @@ use rustyline::hint::Hinter;
 use rustyline::validate::Validator;
 use rustyline::Helper;
 use rustyline::Context;
-use std::borrow::Cow;
 
 struct CommandCompleter;
 
@@ -156,7 +155,7 @@ impl ChatSession {
         Ok(())
     }
 
-    async fn handle_command(&mut self, command: &str, client: &Client) -> Result<bool, Box<dyn std::error::Error>> {
+    async fn handle_command(&mut self, command: &str, _client: &Client) -> Result<bool, Box<dyn std::error::Error>> {
         let parts: Vec<&str> = command.splitn(2, ' ').collect();
         match parts[0] {
             "quit" | "bye" | "q" => return Ok(true),
@@ -207,10 +206,10 @@ impl ChatSession {
             "help" | "h" | "?" => {
                 println!("\nAvailable commands:");
                 println!("/quit, /q, /bye   - Exit interactive mode");
-                println!("/system, /s       - Change system prompt (e.g., /system You are a coding assistant)");
-                println!("/clear, /c        - Clear conversation history");
-                println!("/mic, /m          - Record audio using 'asak rec' and use the transcription as a query");
-                println!("/help, /h, /?     - Show this help message");
+                println!("/system           - Change system prompt (e.g., /system You are a coding assistant)");
+                println!("/clear            - Clear conversation history");
+                println!("/mic              - Record audio using 'asak rec' and use the transcription as a query");
+                println!("/help             - Show this help message");
             }
             _ => {
                 println!("Unknown command: {}", command);
