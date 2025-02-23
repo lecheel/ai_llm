@@ -12,6 +12,13 @@ use cli::{Cli, Commands, DEFAULT_MODEL, list_models, execute_query};
 use interactive::interactive_mode;
 use chat_session::ChatSession;
 
+const BANNER : &str = r#"                   _           
+      ___ ___   __| | ___ _ __  2o25
+     / __/ _ \ / _` |/ _ \ '__|
+    | (_| (_) | (_| |  __/ |   
+     \___\___/ \__,_|\___|_|  󰘦  󰊠  ● ● ● 
+"#;
+
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -24,6 +31,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap_or(DEFAULT_MODEL.to_string());
 
     let client = Client::default();
+
+    println!("{}", BANNER);
 
     match cli.command {
         Some(Commands::ListModels) => {
