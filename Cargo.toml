@@ -6,10 +6,10 @@ edition = "2021"
 [dependencies]
 genai = "0.1.22"
 tokio = { version = "1.27.0", features = ["full"] }
-clap = { version = "4.4", features = ["derive"] }
+clap = { version = "4.5.30", features = ["derive", "env"] }
 futures = "0.3.28"
 colored = "2.0.0"
 directories = "4.0"
 serde = { version = "1.0", features = ["derive"] }
 toml = "0.5"
-bat = "0.22.0"
+bat = "0.24.0"

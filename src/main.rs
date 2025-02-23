@@ -9,36 +9,32 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 use toml;
 use bat::Input;
-
 use std::fs::File;
 
 const DEFAULT_MODEL: &str = "gemini-2.0-flash";
 
-// Configuration struct for TOML file
 #[derive(Deserialize, Serialize, Default)]
 struct Config {
     default_model: Option<String>,
 }
 
-// CLI structure using clap
 #[derive(Parser)]
 #[command(author, version, about = "A CLI tool to interact with AI models", long_about = None)]
 struct Cli {
-    /// The model to use
     #[arg(short, long)]
     model: Option<String>,
-    /// Enable streaming output
     #[arg(short, long)]
     stream: bool,
     #[command(subcommand)]
     command: Option<Commands>,
 }
 
-#[derive(Subcommand)]
+
+#[derive(Subcommand, Debug, Clone, PartialEq, Eq)]
 enum Commands {
     /// List all available models
     ListModels,
-    /// Run in single query mode
+    /// Run a single query and exit
     Query {
         /// The question to ask
         #[arg(short, long)]
@@ -49,9 +45,24 @@ enum Commands {
         /// The model to set as default
         model: String,
     },
+    #[clap(hide = true)]
+    Interactive, // Default interactive mode
+    /// Exit interactive mode
+    Quit,
+    /// Set the system prompt
+    System {
+        /// The system prompt to set
+        prompt: String,
+    },
+    /// Clear the conversation history
+    Clear,
+    /// Record audio using 'asak rec' and use transcription as query
+    Mic,
+    /// Show help for interactive mode commands
+    Help,
 }
 
-// Session struct to manage chat history
+
 struct ChatSession {
     messages: Vec<ChatMessage>,
     model: String,
@@ -104,6 +115,65 @@ impl ChatSession {
 
         io::stdout().flush()?;
         Ok(())
+    }
+
+    async fn handle_command(&mut self, command: &str, client: &Client) -> Result<bool, Box<dyn std::error::Error>> {
+        let parts: Vec<&str> = command.splitn(2, ' ').collect();
+        match parts[0] {
+            "quit" | "bye" | "q" => return Ok(true),
+            "system" | "s" => {
+                if parts.len() > 1 {
+                    let system_message = parts[1];
+                    self.messages[0] = ChatMessage::system(system_message);
+                    println!("Updated system prompt: {}", system_message);
+                } else {
+                    println!("Usage: /system <new system prompt>");
+                }
+            }
+            "clear" | "c" => {
+                self.messages = vec![ChatMessage::system(
+                    "You are a helpful AI assistant. Answer concisely and clearly.",
+                )];
+                println!("Conversation history cleared.");
+            }
+            "mic" | "m" => {
+                println!("Starting recording... Please speak now.");
+                let mut child = std::process::Command::new("asak")
+                    .arg("rec")
+                    .stdout(std::process::Stdio::inherit())
+                    .stderr(std::process::Stdio::inherit())
+                    .spawn()?;
+                let status = child.wait()?;
+                if status.success() {
+                    println!("Recording finished.");
+                    match std::fs::read_to_string("/tmp/mic.md") {
+                        Ok(content) => {
+                            let preview = content.lines().take(3).collect::<Vec<_>>().join("\n");
+                            println!("\x1b[33mTranscription preview:\x1b[0m\n{}", preview);
+                            println!("\x1b[32mMachine response:\x1b[0m");
+                            self.add_message(&content, client).await?;
+                        }
+                        Err(e) => {
+                            println!("Failed to read transcription file: {}", e);
+                        }
+                    }
+                } else {
+                    println!("Error during recording. Ensure 'asak rec' is installed and functional.");
+                }
+            }
+            "help" | "h" | "?" => {
+                println!("\nAvailable commands:");
+                println!("/quit, /q, /bye   - Exit interactive mode");
+                println!("/system, /s       - Change system prompt (e.g., /system You are a coding assistant)");
+                println!("/clear, /c        - Clear conversation history");
+                println!("/mic, /m          - Record audio using 'asak rec' and use the transcription as a query");
+                println!("/help, /h, /?     - Show this help message");
+            }
+            _ => {
+                println!("Unknown command: {}", command);
+            }
+        }
+        Ok(false)
     }
 }
 
@@ -196,7 +266,6 @@ async fn interactive_mode(
         if question == "q" {
             break;
         }
-
         if question == "jc" {
             let content = std::fs::read_to_string("/tmp/mic.md")?;
             let preview = content.lines().take(3).collect::<Vec<_>>().join("\n");
@@ -206,66 +275,16 @@ async fn interactive_mode(
             continue;
         }
 
+
         if question.is_empty() {
             continue;
         }
 
         if question.starts_with("/") {
-            let parts: Vec<&str> = question.splitn(2, ' ').collect();
-            match parts[0] {
-                "/quit" | "/bye" => {
+            let command = &question[1..]; // Remove the leading "/"
+            if let Ok(should_quit) = session.handle_command(command, client).await {
+                if should_quit {
                     break;
-                }
-                "/system" => {
-                    if parts.len() > 1 {
-                        let system_message = parts[1];
-                        session.messages[0] = ChatMessage::system(system_message);
-                        println!("Updated system prompt: {}", system_message);
-                    } else {
-                        println!("Usage: /system <new system prompt>");
-                    }
-                }
-                "/clear" => {
-                    session = ChatSession::new(model.to_string(), stream);
-                    println!("Conversation history cleared.");
-                }
-                "/mic" => {
-                    println!("Starting recording... Please speak now.");
-                    let mut child = std::process::Command::new("asak")
-                        .arg("rec")
-                        .stdout(std::process::Stdio::inherit())
-                        .stderr(std::process::Stdio::inherit())
-                        .spawn()?;
-                    let status = child.wait()?;
-                    if status.success() {
-                        println!("Recording finished.");
-                        /*
-                        match std::fs::read_to_string("/tmp/mic.md") {
-                            Ok(content) => {
-                                let preview = content.lines().take(3).collect::<Vec<_>>().join("\n");
-                                println!("\x1b[33mTranscription preview:\x1b[0m\n{}", preview);
-                                println!("\x1b[32mMachine response:\x1b[0m");
-                                session.add_message(&content, client).await?;
-                            }
-                            Err(e) => {
-                                println!("Failed to read transcription file: {}", e);
-                            }
-                        }
-                        */
-                    } else {
-                        println!("Error during recording. Ensure 'asak rec' is installed and functional.");
-                    }
-                }
-                "/help" => {
-                    println!("\nAvailable commands:");
-                    println!("/quit    - Exit interactive mode");
-                    println!("/system  - Change system prompt (e.g., /system You are a coding assistant)");
-                    println!("/clear   - Clear conversation history");
-                    println!("/mic     - Record audio using 'asak rec' and use the transcription as a query");
-                    println!("/help    - Show this help message");
-                }
-                _ => {
-                    println!("Unknown command: {}", question);
                 }
             }
         } else if !question.is_empty() {
@@ -276,27 +295,18 @@ async fn interactive_mode(
     Ok(())
 }
 
-// Main function
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Get configuration path
     let config_path = get_config_path();
-    
-    // Load configuration
     let config = load_config(&config_path);
-    
-    // Parse command-line arguments
     let cli = Cli::parse();
-    
-    // Determine the model to use: CLI argument > config > default
+
     let model = cli.model
         .or(config.default_model)
         .unwrap_or(DEFAULT_MODEL.to_string());
-    
-    // Initialize the AI client
+
     let client = Client::default();
-    
-    // Handle subcommands or default to interactive mode
+
     match cli.command {
         Some(Commands::ListModels) => {
             list_models(&client).await?;
@@ -311,10 +321,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             save_config(&config_path, &new_config)?;
             println!("Default model set to {}", model);
         }
-        None => {
+        Some(Commands::Interactive) => {
             interactive_mode(&client, &model, cli.stream).await?;
         }
+        None => { // Default to interactive mode if no subcommand
+            interactive_mode(&client, &model, cli.stream).await?;
+        }
+        Some(Commands::Quit) => {}, // Exit program
+        Some(Commands::System { prompt }) => {
+            let mut session = ChatSession::new(model.clone(), cli.stream); // Create session to update system prompt
+            session.handle_command(&format!("system {}", prompt), &client).await?;
+        }
+        Some(Commands::Clear) => {
+            let mut session = ChatSession::new(model.clone(), cli.stream); // Create session to clear history
+            session.handle_command("clear", &client).await?;
+        }
+        Some(Commands::Mic) => {
+            let mut session = ChatSession::new(model.clone(), cli.stream); // Create session for mic input
+            session.handle_command("mic", &client).await?;
+        }
+        Some(Commands::Help) => {
+            let mut session = ChatSession::new(model.clone(), cli.stream); // Create session for help
+            session.handle_command("help", &client).await?;
+        }
     }
-    
+
     Ok(())
 }
