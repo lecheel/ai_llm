@@ -4,28 +4,31 @@ use genai::chat::{ChatMessage, ChatRequest};
 use genai::Client;
 use genai::adapter::AdapterKind;
 use std::io::{self, Write};
-use futures::StreamExt;
+use directories::ProjectDirs;
+use std::path::PathBuf;
+use serde::{Deserialize, Serialize};
+use toml;
 
 const DEFAULT_MODEL: &str = "gemini-2.0-flash";
-const MODEL_OPENAI: &str = "gpt-4o-mini";
-const MODEL_ANTHROPIC: &str = "claude-3-haiku-20240307";
-const MODEL_COHERE: &str = "command-light";
-const MODEL_GROQ: &str = "llama3-8b-8192";
-const MODEL_OLLAMA: &str = "gemma:2b";
-const MODEL_XAI: &str = "grok-beta";
-const MODEL_DEEPSEEK: &str = "deepseek-chat";
 
+// Configuration struct for TOML file
+#[derive(Deserialize, Serialize, Default)]
+struct Config {
+    default_model: Option<String>,
+}
+
+// CLI structure using clap
 #[derive(Parser)]
-#[command(author, version, about, long_about = None)]
+#[command(author, version, about = "A CLI tool to interact with AI models", long_about = None)]
 struct Cli {
-    /// The model to use (default: gemini-2.0-flash)
-    #[arg(short, long, default_value = DEFAULT_MODEL)]
-    model: String,
+    /// The model to use
+    #[arg(short, long)]
+    model: Option<String>,
     /// Enable streaming output
     #[arg(short, long)]
     stream: bool,
     #[command(subcommand)]
-    command: Option<Commands>, // Make subcommand optional
+    command: Option<Commands>,
 }
 
 #[derive(Subcommand)]
@@ -38,8 +41,14 @@ enum Commands {
         #[arg(short, long)]
         question: String,
     },
+    /// Set the default model in the config file
+    SetDefault {
+        /// The model to set as default
+        model: String,
+    },
 }
 
+// Session struct to manage chat history
 struct ChatSession {
     messages: Vec<ChatMessage>,
     model: String,
@@ -62,23 +71,10 @@ impl ChatSession {
         self.messages.push(ChatMessage::user(content));
         let chat_req = ChatRequest::new(self.messages.clone());
 
-        let response = if self.stream {
-            let mut full_content = String::new();
+        let assistant_response = if self.stream {
             let chat_stream = client.exec_chat_stream(&self.model, chat_req, None).await?;
             let options = PrintChatStreamOptions::from_print_events(false);
-            let response = print_chat_stream(chat_stream, Some(&options)).await;
-
-            match response {
-                Ok(content) => {
-                    full_content.push_str(&content);
-                }
-                Err(e) => {
-                    eprintln!("Error receiving response: {}", e);
-                }
-            }
-
-            io::stdout().flush()?;
-            full_content
+            print_chat_stream(chat_stream, Some(&options)).await?
         } else {
             let chat_res = client.exec_chat(&self.model, chat_req, None).await?;
             let response_text = chat_res.content_text_as_str().unwrap_or("NO ANSWER").to_string();
@@ -86,32 +82,35 @@ impl ChatSession {
             response_text
         };
 
-        self.messages.push(ChatMessage::assistant(&response));
+        self.messages.push(ChatMessage::assistant(&assistant_response));
+        io::stdout().flush()?;
         Ok(())
     }
 }
 
-fn get_available_models() -> Vec<&'static str> {
-    vec![
-        DEFAULT_MODEL,
-        MODEL_OPENAI,
-        MODEL_ANTHROPIC,
-        MODEL_COHERE,
-        MODEL_GROQ,
-        MODEL_OLLAMA,
-        MODEL_XAI,
-        MODEL_DEEPSEEK,
-    ]
+// Helper functions
+fn get_config_path() -> PathBuf {
+    if let Some(proj_dirs) = ProjectDirs::from("com","leware","ai_llm") {
+        let config_dir = proj_dirs.config_dir();
+        std::fs::create_dir_all(config_dir).expect("Failed to create config directory");
+        config_dir.join("config.toml")
+    } else {
+        PathBuf::from("config.toml") // Fallback
+    }
 }
 
-fn validate_model(model: &str) -> Result<(), String> {
-    if !get_available_models().contains(&model) {
-        return Err(format!(
-            "Invalid model: {}. Available models: {:?}",
-            model,
-            get_available_models()
-        ));
+fn load_config(config_path: &PathBuf) -> Config {
+    if let Ok(config_str) = std::fs::read_to_string(config_path) {
+        //println!("Loaded config from {}", config_path.display());
+        toml::from_str(&config_str).unwrap_or_default()
+    } else {
+        Config::default()
     }
+}
+
+fn save_config(config_path: &PathBuf, config: &Config) -> Result<(), Box<dyn std::error::Error>> {
+    let toml_str = toml::to_string(config)?;
+    std::fs::write(config_path, toml_str)?;
     Ok(())
 }
 
@@ -140,8 +139,6 @@ async fn execute_query(
     question: &str,
     stream: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    validate_model(model)?;
-
     let chat_req = ChatRequest::new(vec![
         ChatMessage::system("Answer concisely and clearly"),
         ChatMessage::user(question),
@@ -164,7 +161,6 @@ async fn interactive_mode(
     model: &str,
     stream: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    validate_model(model)?;
 
     println!("Interactive Mode (type 'q' to quit, '/help' for help)");
     // color yellow for model name
@@ -219,7 +215,7 @@ async fn interactive_mode(
                     println!("Unknown command: {}", question);
                 }
             }
-        } else {
+        } else if !question.is_empty() {
             session.add_message(question, client).await?;
         }
     }
@@ -227,23 +223,45 @@ async fn interactive_mode(
     Ok(())
 }
 
+// Main function
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Get configuration path
+    let config_path = get_config_path();
+    
+    // Load configuration
+    let config = load_config(&config_path);
+    
+    // Parse command-line arguments
     let cli = Cli::parse();
+    
+    // Determine the model to use: CLI argument > config > default
+    let model = cli.model
+        .or(config.default_model)
+        .unwrap_or(DEFAULT_MODEL.to_string());
+    
+    // Initialize the AI client
     let client = Client::default();
-
+    
+    // Handle subcommands or default to interactive mode
     match cli.command {
         Some(Commands::ListModels) => {
             list_models(&client).await?;
         }
         Some(Commands::Query { question }) => {
-            execute_query(&client, &cli.model, &question, cli.stream).await?;
+            execute_query(&client, &model, &question, cli.stream).await?;
+        }
+        Some(Commands::SetDefault { model }) => {
+            let new_config = Config {
+                default_model: Some(model.clone()),
+            };
+            save_config(&config_path, &new_config)?;
+            println!("Default model set to {}", model);
         }
         None => {
-            // Default to interactive mode if no subcommand is provided
-            interactive_mode(&client, &cli.model, cli.stream).await?;
+            interactive_mode(&client, &model, cli.stream).await?;
         }
     }
-
+    
     Ok(())
 }

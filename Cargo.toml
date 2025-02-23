@@ -9,3 +9,6 @@ tokio = { version = "1.27.0", features = ["full"] }
 clap = { version = "4.4", features = ["derive"] }
 futures = "0.3.28"
 colored = "2.0.0"
+directories = "4.0"
+serde = { version = "1.0", features = ["derive"] }
+toml = "0.5"
