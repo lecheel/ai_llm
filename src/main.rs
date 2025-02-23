@@ -54,18 +54,18 @@ impl Completer for CommandCompleter {
         ];
 
         let mut candidates = Vec::new();
-        let line = line.to_lowercase();
+        let lower_line = &line[..pos].to_lowercase();
 
         for command in &commands {
-            if command.starts_with(&line) {
+            if command.to_lowercase().starts_with(lower_line) {
                 candidates.push(Pair {
-                    display: command.to_string(), // Convert to String
-                    replacement: command.to_string(), // Convert to String
+                    display: command.to_string(),
+                    replacement: command.to_string(),
                 });
             }
         }
 
-        Ok((pos, candidates))
+        Ok((pos - lower_line.len(), candidates))
     }
 }
 
@@ -185,6 +185,8 @@ impl ChatSession {
                 let status = child.wait()?;
                 if status.success() {
                     println!("Recording finished.");
+                    /*
+                    * TODO add this back with whisper API
                     match std::fs::read_to_string("/tmp/mic.md") {
                         Ok(content) => {
                             let preview = content.lines().take(3).collect::<Vec<_>>().join("\n");
@@ -196,6 +198,8 @@ impl ChatSession {
                             println!("Failed to read transcription file: {}", e);
                         }
                     }
+                    */
+
                 } else {
                     println!("Error during recording. Ensure 'asak rec' is installed and functional.");
                 }
