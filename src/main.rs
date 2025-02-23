@@ -5,10 +5,10 @@ use genai::Client;
 use genai::adapter::AdapterKind;
 use std::io::{self, Write};
 
+const DEFAULT_MODEL: &str = "gemini-2.0-flash";
 const MODEL_OPENAI: &str = "gpt-4o-mini";
 const MODEL_ANTHROPIC: &str = "claude-3-haiku-20240307";
 const MODEL_COHERE: &str = "command-light";
-const MODEL_GEMINI: &str = "gemini-2.0-flash";
 const MODEL_GROQ: &str = "llama3-8b-8192";
 const MODEL_OLLAMA: &str = "gemma:2b";
 const MODEL_XAI: &str = "grok-beta";
@@ -27,8 +27,8 @@ enum Commands {
     ListModels,
     /// Run in single query mode
     Query {
-        /// The model to use
-        #[arg(short, long)]
+        /// The model to use (default: gemini-2.0-flash)
+        #[arg(short, long, default_value = DEFAULT_MODEL)]
         model: String,
         /// The question to ask
         #[arg(short, long)]
@@ -39,13 +39,37 @@ enum Commands {
     },
     /// Run in interactive mode
     Interactive {
-        /// The model to use
-        #[arg(short, long)]
+        /// The model to use (default: gemini-2.0-flash)
+        #[arg(short, long, default_value = DEFAULT_MODEL)]
         model: String,
         /// Enable streaming output
         #[arg(short, long)]
         stream: bool,
     },
+}
+
+fn get_available_models() -> Vec<&'static str> {
+    vec![
+        DEFAULT_MODEL,
+        MODEL_OPENAI,
+        MODEL_ANTHROPIC,
+        MODEL_COHERE,
+        MODEL_GROQ,
+        MODEL_OLLAMA,
+        MODEL_XAI,
+        MODEL_DEEPSEEK,
+    ]
+}
+
+fn validate_model(model: &str) -> Result<(), String> {
+    if !get_available_models().contains(&model) {
+        return Err(format!(
+            "Invalid model: {}. Available models: {:?}",
+            model,
+            get_available_models()
+        ));
+    }
+    Ok(())
 }
 
 async fn list_models(client: &Client) -> Result<(), Box<dyn std::error::Error>> {
@@ -58,6 +82,7 @@ async fn list_models(client: &Client) -> Result<(), Box<dyn std::error::Error>> 
         AdapterKind::Cohere,
     ];
 
+    println!("\nDefault model: {}", DEFAULT_MODEL);
     for &kind in kinds {
         println!("\n--- Models for {kind}");
         let models = client.all_model_names(kind).await?;
@@ -72,6 +97,8 @@ async fn execute_query(
     question: &str,
     stream: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    validate_model(model)?;
+
     let chat_req = ChatRequest::new(vec![
         ChatMessage::system("Answer concisely and clearly"),
         ChatMessage::user(question),
@@ -94,6 +121,8 @@ async fn interactive_mode(
     model: &str,
     stream: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    validate_model(model)?;
+
     println!("Interactive Mode (type 'exit' to quit)");
     println!("Using model: {}", model);
 

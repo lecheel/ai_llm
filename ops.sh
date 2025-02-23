@@ -1,3 +1,4 @@
 #! /bin/bash
 cargo build --release
-cp ./target/release/ai_cli .
+cp ./target/release/llm .
+cp llm ~/bin
