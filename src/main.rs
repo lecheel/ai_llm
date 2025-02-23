@@ -49,7 +49,7 @@ impl Completer for CommandCompleter {
         _ctx: &Context<'_>,
     ) -> rustyline::Result<(usize, Vec<Self::Candidate>)> {
         let commands = vec![
-            "/help", "/clear", "/quit", "/system", "/mic",
+            "/help", "/clear", "/quit", "/system", "/mic", "/cls",
         ];
 
         let mut candidates = Vec::new();
@@ -159,7 +159,11 @@ impl ChatSession {
         let parts: Vec<&str> = command.splitn(2, ' ').collect();
         match parts[0] {
             "quit" | "bye" | "q" => return Ok(true),
-            "system" | "s" => {
+            "cls" => {
+                print!("\x1b[2J");
+                print!("\x1b[1;1H");
+            }
+            "system" => {
                 if parts.len() > 1 {
                     let system_message = parts[1];
                     self.messages[0] = ChatMessage::system(system_message);
@@ -168,13 +172,13 @@ impl ChatSession {
                     println!("Usage: /system <new system prompt>");
                 }
             }
-            "clear" | "c" => {
+            "clear" => {
                 self.messages = vec![ChatMessage::system(
                     "You are a helpful AI assistant. Answer concisely and clearly.",
                 )];
                 println!("Conversation history cleared.");
             }
-            "mic" | "m" => {
+            "mic"  => {
                 println!("Starting recording... Please speak now.");
                 let mut child = std::process::Command::new("asak")
                     .arg("rec")
@@ -203,10 +207,11 @@ impl ChatSession {
                     println!("Error during recording. Ensure 'asak rec' is installed and functional.");
                 }
             }
-            "help" | "h" | "?" => {
+            "help" | "?" => {
                 println!("\nAvailable commands:");
                 println!("/quit, /q, /bye   - Exit interactive mode");
                 println!("/system           - Change system prompt (e.g., /system You are a coding assistant)");
+                println!("/cls              - Clear the screen");
                 println!("/clear            - Clear conversation history");
                 println!("/mic              - Record audio using 'asak rec' and use the transcription as a query");
                 println!("/help             - Show this help message");
@@ -317,6 +322,12 @@ async fn interactive_mode(
 
                 if question == "q" {
                     break;
+                }
+
+                if question == "cls" {
+                    print!("\x1b[2J");
+                    print!("\x1b[1;1H");
+                    continue;
                 }
                 if question == "jc" {
                     let content = std::fs::read_to_string("/tmp/mic.md")?;
