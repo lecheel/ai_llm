@@ -8,6 +8,7 @@ use directories::ProjectDirs;
 use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 use toml;
+use bat::Input;
 
 use std::fs::File;
 
@@ -80,7 +81,18 @@ impl ChatSession {
         } else {
             let chat_res = client.exec_chat(&self.model, chat_req, None).await?;
             let response_text = chat_res.content_text_as_str().unwrap_or("NO ANSWER").to_string();
-            println!("{}", response_text);
+            // Create a copy of the bytes for the printer
+            let display_text = response_text.clone();
+            let mut printer = bat::PrettyPrinter::new();
+            printer
+                .language("markdown")  // Set language to markdown
+                .grid(true)           // Enable grid
+                .line_numbers(false)  // Disable line numbers
+                .theme("TwoDark")     // Set theme
+                .input(Input::from_bytes(display_text.as_bytes()))
+                .print()?;
+
+            println!();
             response_text
         };
 
