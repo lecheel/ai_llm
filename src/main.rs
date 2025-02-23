@@ -1,74 +1,137 @@
+use clap::{Parser, Subcommand};
 use genai::chat::printer::{print_chat_stream, PrintChatStreamOptions};
 use genai::chat::{ChatMessage, ChatRequest};
 use genai::Client;
 use genai::adapter::AdapterKind;
+use std::io::{self, Write};
 
-const MODEL_OPENAI: &str = "gpt-4o-mini"; // o1-mini, gpt-4o-mini
+const MODEL_OPENAI: &str = "gpt-4o-mini";
 const MODEL_ANTHROPIC: &str = "claude-3-haiku-20240307";
 const MODEL_COHERE: &str = "command-light";
 const MODEL_GEMINI: &str = "gemini-2.0-flash";
 const MODEL_GROQ: &str = "llama3-8b-8192";
-const MODEL_OLLAMA: &str = "gemma:2b"; // sh: `ollama pull gemma:2b`
+const MODEL_OLLAMA: &str = "gemma:2b";
 const MODEL_XAI: &str = "grok-beta";
 const MODEL_DEEPSEEK: &str = "deepseek-chat";
 
-const KINDS: &[AdapterKind] = &[
-    AdapterKind::OpenAI,
-    AdapterKind::Ollama,
-    AdapterKind::Gemini,
-    AdapterKind::Anthropic,
-    AdapterKind::Groq,
-    AdapterKind::Cohere,
-];
+#[derive(Parser)]
+#[command(author, version, about, long_about = None)]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
+}
 
-const MODEL_AND_KEY_ENV_NAME_LIST: &[(&str, &str)] = &[
-    (MODEL_GEMINI, "GOOGLE_API_KEY"),
-    //(MODEL_XAI, "XAI_API_KEY"),
-    //(MODEL_DEEPSEEK, "DEEPSEEK_API_KEY"),
-    //(MODEL_OLLAMA, ""),
-];
+#[derive(Subcommand)]
+enum Commands {
+    /// List all available models
+    ListModels,
+    /// Run in single query mode
+    Query {
+        /// The model to use
+        #[arg(short, long)]
+        model: String,
+        /// The question to ask
+        #[arg(short, long)]
+        question: String,
+        /// Enable streaming output
+        #[arg(short, long)]
+        stream: bool,
+    },
+    /// Run in interactive mode
+    Interactive {
+        /// The model to use
+        #[arg(short, long)]
+        model: String,
+        /// Enable streaming output
+        #[arg(short, long)]
+        stream: bool,
+    },
+}
+
+async fn list_models(client: &Client) -> Result<(), Box<dyn std::error::Error>> {
+    let kinds = &[
+        AdapterKind::OpenAI,
+        AdapterKind::Ollama,
+        AdapterKind::Gemini,
+        AdapterKind::Anthropic,
+        AdapterKind::Groq,
+        AdapterKind::Cohere,
+    ];
+
+    for &kind in kinds {
+        println!("\n--- Models for {kind}");
+        let models = client.all_model_names(kind).await?;
+        println!("{models:?}");
+    }
+    Ok(())
+}
+
+async fn execute_query(
+    client: &Client,
+    model: &str,
+    question: &str,
+    stream: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let chat_req = ChatRequest::new(vec![
+        ChatMessage::system("Answer concisely and clearly"),
+        ChatMessage::user(question),
+    ]);
+
+    if stream {
+        println!("\n--- Streaming Response:");
+        let chat_res = client.exec_chat_stream(model, chat_req, None).await?;
+        print_chat_stream(chat_res, Some(&PrintChatStreamOptions::from_print_events(false))).await?;
+    } else {
+        println!("\n--- Response:");
+        let chat_res = client.exec_chat(model, chat_req, None).await?;
+        println!("{}", chat_res.content_text_as_str().unwrap_or("NO ANSWER"));
+    }
+    Ok(())
+}
+
+async fn interactive_mode(
+    client: &Client,
+    model: &str,
+    stream: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    println!("Interactive Mode (type 'exit' to quit)");
+    println!("Using model: {}", model);
+
+    loop {
+        print!("\nEnter your question: ");
+        io::stdout().flush()?;
+
+        let mut input = String::new();
+        io::stdin().read_line(&mut input)?;
+        let question = input.trim();
+
+        if question.eq_ignore_ascii_case("exit") {
+            break;
+        }
+
+        execute_query(client, model, question, stream).await?;
+    }
+
+    println!("Exiting interactive mode");
+    Ok(())
+}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let cli = Cli::parse();
+    let client = Client::default();
 
-    let question = "Why is the sky red?";
-	let chat_req = ChatRequest::new(vec![
-		// -- Messages (de/activate to see the differences)
-		ChatMessage::system("Answer in one sentence"),
-		ChatMessage::user(question),
-	]);
+    match &cli.command {
+        Commands::ListModels => {
+            list_models(&client).await?;
+        }
+        Commands::Query { model, question, stream } => {
+            execute_query(&client, model, question, *stream).await?;
+        }
+        Commands::Interactive { model, stream } => {
+            interactive_mode(&client, model, *stream).await?;
+        }
+    }
 
-	let client = Client::default();
-
-	for &kind in KINDS {
-		println!("\n--- Models for {kind}");
-		let models = client.all_model_names(kind).await?;
-		println!("{models:?}");
-	}
-
-	let print_options = PrintChatStreamOptions::from_print_events(false);
-
-	for (model, env_name) in MODEL_AND_KEY_ENV_NAME_LIST {
-		// Skip if the environment name is not set
-		if !env_name.is_empty() && std::env::var(env_name).is_err() {
-			println!("===== Skipping model: {model} (env var not set: {env_name})");
-			continue;
-		}
-
-		let adapter_kind = client.resolve_service_target(model)?.model.adapter_kind;
-
-		println!("\n===== MODEL: {model} ({adapter_kind}) =====");
-		println!("\n--- Question:\n{question}");
-		println!("\n--- Answer:");
-		let chat_res = client.exec_chat(model, chat_req.clone(), None).await?;
-		println!("{}", chat_res.content_text_as_str().unwrap_or("NO ANSWER"));
-		println!("\n--- Answer: (streaming)");
-		let chat_res = client.exec_chat_stream(model, chat_req.clone(), None).await?;
-		print_chat_stream(chat_res, Some(&print_options)).await?;
-		println!();
-	}
-
-	Ok(())
+    Ok(())
 }
-
-
