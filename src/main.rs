@@ -10,6 +10,17 @@ use serde::{Deserialize, Serialize};
 use toml;
 use bat::Input;
 use std::fs::File;
+use rustyline::error::ReadlineError;
+use rustyline::Editor;
+use rustyline::completion::{Completer, Pair};
+use rustyline::highlight::Highlighter;
+use rustyline::hint::Hinter;
+use rustyline::validate::Validator;
+use rustyline::Helper;
+use rustyline::Context;
+use std::borrow::Cow;
+
+struct CommandCompleter;
 
 const DEFAULT_MODEL: &str = "gemini-2.0-flash";
 
@@ -29,6 +40,34 @@ struct Cli {
     command: Option<Commands>,
 }
 
+impl Completer for CommandCompleter {
+    type Candidate = Pair;
+
+    fn complete(
+        &self,
+        line: &str,
+        pos: usize,
+        _ctx: &Context<'_>,
+    ) -> rustyline::Result<(usize, Vec<Self::Candidate>)> {
+        let commands = vec![
+            "/help", "/clear", "/quit", "/system", "/mic",
+        ];
+
+        let mut candidates = Vec::new();
+        let line = line.to_lowercase();
+
+        for command in &commands {
+            if command.starts_with(&line) {
+                candidates.push(Pair {
+                    display: command.to_string(), // Convert to String
+                    replacement: command.to_string(), // Convert to String
+                });
+            }
+        }
+
+        Ok((pos, candidates))
+    }
+}
 
 #[derive(Subcommand, Debug, Clone, PartialEq, Eq)]
 enum Commands {
@@ -245,6 +284,14 @@ async fn execute_query(
     Ok(())
 }
 
+impl Highlighter for CommandCompleter {}
+impl Hinter for CommandCompleter {
+    type Hint = String;
+}
+impl Validator for CommandCompleter {}
+
+impl Helper for CommandCompleter {}
+
 async fn interactive_mode(
     client: &Client,
     model: &str,
@@ -255,40 +302,53 @@ async fn interactive_mode(
 
     let mut session = ChatSession::new(model.to_string(), stream);
 
+    let mut rl = Editor::<CommandCompleter>::new();
+    rl.set_helper(Some(CommandCompleter)); // Set the custom helper
+    rl.bind_sequence(rustyline::KeyEvent(rustyline::KeyCode::Tab, rustyline::Modifiers::NONE), rustyline::Cmd::Complete);
+
     loop {
-        print!("User: ");
-        io::stdout().flush()?;
+        let readline = rl.readline("User: ");
+        match readline {
+            Ok(line) => {
+                let question = line.trim();
 
-        let mut input = String::new();
-        io::stdin().read_line(&mut input)?;
-        let question = input.trim();
-
-        if question == "q" {
-            break;
-        }
-        if question == "jc" {
-            let content = std::fs::read_to_string("/tmp/mic.md")?;
-            let preview = content.lines().take(3).collect::<Vec<_>>().join("\n");
-            println!("\x1b[33mPreview:\x1b[0m --- load from /tmp/mic.md ---\n{}", preview);
-            println!("\x1b[32mMachine response:\x1b[0m");
-            session.add_message(&content, client).await?;
-            continue;
-        }
-
-
-        if question.is_empty() {
-            continue;
-        }
-
-        if question.starts_with("/") {
-            let command = &question[1..]; // Remove the leading "/"
-            if let Ok(should_quit) = session.handle_command(command, client).await {
-                if should_quit {
+                if question == "q" {
                     break;
                 }
+                if question == "jc" {
+                    let content = std::fs::read_to_string("/tmp/mic.md")?;
+                    let preview = content.lines().take(3).collect::<Vec<_>>().join("\n");
+                    println!("\x1b[33mPreview:\x1b[0m --- load from /tmp/mic.md ---\n{}", preview);
+                    println!("\x1b[32mMachine response:\x1b[0m");
+                    session.add_message(&content, client).await?;
+                    continue;
+                }
+
+                if question.is_empty() {
+                    continue;
+                }
+
+                if question.starts_with("/") {
+                    let command = &question[1..]; // Remove the leading "/"
+                    if session.handle_command(command, client).await? {
+                        break;
+                    }
+                } else {
+                    session.add_message(question, client).await?;
+                }
             }
-        } else if !question.is_empty() {
-            session.add_message(question, client).await?;
+            Err(ReadlineError::Interrupted) => {
+                println!("CTRL-C");
+                break;
+            }
+            Err(ReadlineError::Eof) => {
+                println!("CTRL-D");
+                break;
+            }
+            Err(err) => {
+                println!("Error: {:?}", err);
+                break;
+            }
         }
     }
 
