@@ -180,9 +180,7 @@ async fn interactive_mode(
     model: &str,
     stream: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
-
     println!("Interactive Mode (type 'q' to quit, '/help' for help)");
-    // color yellow for model name
     println!("Using Model: \x1b[33m{}\x1b[0m", model);
 
     let mut session = ChatSession::new(model.to_string(), stream);
@@ -195,19 +193,15 @@ async fn interactive_mode(
         io::stdin().read_line(&mut input)?;
         let question = input.trim();
 
-        // Add q for quit 
         if question == "q" {
             break;
         }
 
-        // Add jc for just confirm load text from /tmp/mic.md 
         if question == "jc" {
-            let content = std::fs::read_to_string("/tmp/mic.md").unwrap();
-            // print preview for 3 lines 
+            let content = std::fs::read_to_string("/tmp/mic.md")?;
             let preview = content.lines().take(3).collect::<Vec<_>>().join("\n");
             println!("\x1b[33mPreview:\x1b[0m --- load from /tmp/mic.md ---\n{}", preview);
             println!("\x1b[32mMachine response:\x1b[0m");
-
             session.add_message(&content, client).await?;
             continue;
         }
@@ -235,11 +229,39 @@ async fn interactive_mode(
                     session = ChatSession::new(model.to_string(), stream);
                     println!("Conversation history cleared.");
                 }
+                "/mic" => {
+                    println!("Starting recording... Please speak now.");
+                    let mut child = std::process::Command::new("asak")
+                        .arg("rec")
+                        .stdout(std::process::Stdio::inherit())
+                        .stderr(std::process::Stdio::inherit())
+                        .spawn()?;
+                    let status = child.wait()?;
+                    if status.success() {
+                        println!("Recording finished.");
+                        /*
+                        match std::fs::read_to_string("/tmp/mic.md") {
+                            Ok(content) => {
+                                let preview = content.lines().take(3).collect::<Vec<_>>().join("\n");
+                                println!("\x1b[33mTranscription preview:\x1b[0m\n{}", preview);
+                                println!("\x1b[32mMachine response:\x1b[0m");
+                                session.add_message(&content, client).await?;
+                            }
+                            Err(e) => {
+                                println!("Failed to read transcription file: {}", e);
+                            }
+                        }
+                        */
+                    } else {
+                        println!("Error during recording. Ensure 'asak rec' is installed and functional.");
+                    }
+                }
                 "/help" => {
                     println!("\nAvailable commands:");
                     println!("/quit    - Exit interactive mode");
                     println!("/system  - Change system prompt (e.g., /system You are a coding assistant)");
                     println!("/clear   - Clear conversation history");
+                    println!("/mic     - Record audio using 'asak rec' and use the transcription as a query");
                     println!("/help    - Show this help message");
                 }
                 _ => {
