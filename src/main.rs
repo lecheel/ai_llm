@@ -9,6 +9,8 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 use toml;
 
+use std::fs::File;
+
 const DEFAULT_MODEL: &str = "gemini-2.0-flash";
 
 // Configuration struct for TOML file
@@ -83,6 +85,11 @@ impl ChatSession {
         };
 
         self.messages.push(ChatMessage::assistant(&assistant_response));
+
+        // Write the final output to /tmp/ans.md
+        let mut file = File::create("/tmp/ans.md")?;
+        writeln!(file, "{}", assistant_response)?;
+
         io::stdout().flush()?;
         Ok(())
     }
@@ -179,6 +186,18 @@ async fn interactive_mode(
         // Add q for quit 
         if question == "q" {
             break;
+        }
+
+        // Add jc for just confirm load text from /tmp/mic.md 
+        if question == "jc" {
+            let content = std::fs::read_to_string("/tmp/mic.md").unwrap();
+            // print preview for 3 lines 
+            let preview = content.lines().take(3).collect::<Vec<_>>().join("\n");
+            println!("\x1b[33mPreview:\x1b[0m --- load from /tmp/mic.md ---\n{}", preview);
+            println!("\x1b[32mMachine response:\x1b[0m");
+
+            session.add_message(&content, client).await?;
+            continue;
         }
 
         if question.is_empty() {
