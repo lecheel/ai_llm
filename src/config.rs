@@ -18,6 +18,16 @@ pub fn get_config_path() -> PathBuf {
     }
 }
 
+pub fn get_sessions_dir() -> PathBuf {
+    if let Some(proj_dirs) = ProjectDirs::from("com","leware","ai_llm") {
+        let sessions_dir = proj_dirs.config_dir().join("sessions");
+        std::fs::create_dir_all(&sessions_dir).expect("Failed to create sessions directory");
+        sessions_dir
+    } else {
+        PathBuf::from("sessions") // Fallback in current directory, but config dir is preferred
+    }
+}
+
 pub fn load_config(config_path: &PathBuf) -> Config {
     if let Ok(config_str) = std::fs::read_to_string(config_path) {
         //println!("Loaded config from {}", config_path.display());

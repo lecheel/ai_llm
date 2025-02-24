@@ -6,6 +6,7 @@ use std::fs::File;
 use bat::Input;
 use std::io::{BufWriter,BufReader};
 use serde::{Deserialize, Serialize};
+use crate::config::get_sessions_dir;
 
 #[derive(Serialize, Deserialize)]
 pub struct SessionState {
@@ -98,23 +99,27 @@ impl ChatSession {
             "save" => {
                 if parts.len() > 1 {
                     let filename = parts[1];
+                    let sessions_dir = get_sessions_dir();
+                    let filepath = sessions_dir.join(filename); // Construct full path in sessions dir
                     let state = self.get_session_state();
-                    let file = File::create(filename)?;
+                    let file = File::create(&filepath)?; // Create file in sessions dir
                     let writer = BufWriter::new(file);
-                    serde_json::to_writer_pretty(writer, &state)?; // Or toml::to_string, yaml_rust::to_string
-                    println!("Session saved to '{}'", filename);
+                    serde_json::to_writer_pretty(writer, &state)?;
+                    println!("Session saved to '{}'", filepath.display()); // Display full path
                 } else {
                     println!("Usage: /save <filename>");
                 }
-            }
+            } 
             "load" => {
                 if parts.len() > 1 {
                     let filename = parts[1];
-                    let file = File::open(filename)?;
+                    let sessions_dir = get_sessions_dir();
+                    let filepath = sessions_dir.join(filename); // Construct full path in sessions dir
+                    let file = File::open(&filepath)?; // Open file from sessions dir
                     let reader = BufReader::new(file);
-                    let state: SessionState = serde_json::from_reader(reader)?; // Or toml::from_str, yaml_rust::from_str
+                    let state: SessionState = serde_json::from_reader(reader)?;
                     self.load_session_state(state);
-                    println!("Session loaded from '{}'", filename);
+                    println!("Session loaded from '{}'", filepath.display()); // Display full path
                 } else {
                     println!("Usage: /load <filename>");
                 }
