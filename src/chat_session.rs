@@ -109,6 +109,18 @@ impl ChatSession {
                     println!("Usage: /system <new system prompt>");
                 }
             }
+            "status" => {
+                println!("--- Current settings ---");
+                println!("Model: {}", self.model);
+                if let genai::chat::MessageContent::Text(text) = &self.messages[0].content {
+                    println!("System prompt: {}", text);
+                }   
+                //println!("System prompt: {:?}", self.messages);
+                //println!("Stream: {}", if self.stream { "ON" } else { "OFF" });
+                if let Some(ref title) = self.title {
+                    println!("Title: {}", title);
+                }
+            }
             "title" => {
                 //self.add_message("summary the dialog as title", _client).await?;
                 // Request the assistant to summarize the dialog as a title
@@ -227,6 +239,7 @@ impl ChatSession {
                 println!("\nAvailable commands:");
                 println!("/quit, /q, /bye   - Exit interactive mode");
                 println!("/system           - Change system prompt (e.g., /system You are a coding assistant)");
+                println!("/status           - Show current model and title ...");
                 println!("/cls              - Clear the screen");
                 println!("/clear            - Clear conversation history");
                 println!("/mic              - Record audio using 'asak rec' and use the transcription as a query");

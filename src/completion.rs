@@ -68,7 +68,8 @@ impl Completer for CommandCompleter {
 
         } else { // Default command completion
             let commands = vec![
-                "/help", "/clear", "/quit", "/system", "/mic", "/cls", "/save", "/load", "/title",
+                "/help", "/clear", "/quit", "/system", "/mic", "/cls", 
+                "/save", "/load", "/title", "/status",
             ];
 
             let mut candidates = Vec::new();
