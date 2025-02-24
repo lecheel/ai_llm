@@ -3,6 +3,7 @@ use crate::completion::CommandCompleter;
 use genai::Client;
 use rustyline::Editor;
 use rustyline::error::ReadlineError;
+use std::io::{self, Write};
 
 pub async fn interactive_mode(
     client: &Client,
@@ -56,11 +57,12 @@ pub async fn interactive_mode(
                 }
             }
             Err(ReadlineError::Interrupted) => {
-                println!("CTRL-C");
-                break;
-            }
+                println!("\x1b[2K\rUser:");
+                io::stdout().flush().unwrap();
+                continue;
+            }            
             Err(ReadlineError::Eof) => {
-                println!("CTRL-D");
+                println!("CTRL-D Quitted");
                 break;
             }
             Err(err) => {

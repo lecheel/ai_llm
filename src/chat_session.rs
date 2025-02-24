@@ -12,17 +12,28 @@ use crate::config::get_sessions_dir;
 pub struct SessionState {
     messages: Vec<ChatMessage>,
     model: String,
-    // stream: bool, // Stream mode is often a CLI option, not session-specific
-    // system_prompt: String, // If you want to save custom system prompts per session
+    stream: bool, // Stream mode is often a CLI option, not session-specific
+    title: Option<String>,
+    system_prompt: String, // If you want to save custom system prompts per session
 }
 
 pub struct ChatSession {
     messages: Vec<ChatMessage>,
     model: String,
     stream: bool,
+    title: Option<String>,
+    system_prompt: String,
 }
 
 impl ChatSession {
+    const PREDEFINED_ROLES: &[(&str, &str)] = &[
+        ("coding_assistant", "You are a coding assistant. Provide concise and accurate code snippets and explanations."),
+        ("creative_writer", "You are a creative writer. Generate engaging stories, poems, and content."),
+        ("technical_support", "You are a technical support assistant. Answer questions about software, hardware, and troubleshooting."),
+        ("language_tutor", "You are a language tutor. Help users learn new languages by providing translations, grammar explanations, and practice exercises."),
+        ("general_knowledge", "You are a general knowledge assistant. Answer questions on a wide range of topics concisely and clearly."),
+    ];
+
     pub fn new(model: String, stream: bool) -> Self {
         let initial_messages = vec![ChatMessage::system(
             "You are a helpful AI assistant. Answer concisely and clearly.",
@@ -31,13 +42,28 @@ impl ChatSession {
             messages: initial_messages,
             model,
             stream,
+            title: None,
+            system_prompt: String::new(),
         }
+    }
+
+    fn clean_filename(filename: &str) -> String {
+        let mut cleaned = filename.to_string();
+
+        // Remove quotes if present
+        if cleaned.starts_with('"') && cleaned.ends_with('"') {
+            cleaned = cleaned.trim_matches('"').to_string();
+        }
+
+        // Replace spaces with underscores
+        cleaned = cleaned.replace(' ', "_");
+
+        cleaned
     }
 
     pub async fn add_message(&mut self, content: &str, client: &Client) -> Result<(), Box<dyn std::error::Error>> {
         self.messages.push(ChatMessage::user(content));
         let chat_req = ChatRequest::new(self.messages.clone());
-
         let assistant_response = if self.stream {
             let chat_stream = client.exec_chat_stream(&self.model, chat_req, None).await?;
             let options = PrintChatStreamOptions::from_print_events(false);
@@ -45,32 +71,26 @@ impl ChatSession {
         } else {
             let chat_res = client.exec_chat(&self.model, chat_req, None).await?;
             let response_text = chat_res.content_text_as_str().unwrap_or("NO ANSWER").to_string();
-            // Create a copy of the bytes for the printer
             let display_text = response_text.clone();
             let mut printer = bat::PrettyPrinter::new();
             printer
-                .language("markdown")  // Set language to markdown
-                .grid(true)           // Enable grid
-                .line_numbers(false)  // Disable line numbers
-                .theme("TwoDark")     // Set theme
+                .language("markdown")
+                .grid(true)
+                .line_numbers(false)
+                .theme("TwoDark")
                 .input(Input::from_bytes(display_text.as_bytes()))
                 .print()?;
-
             println!();
             response_text
         };
-
         self.messages.push(ChatMessage::assistant(&assistant_response));
-
-        // Write the final output to /tmp/ans.md
         let mut file = File::create("/tmp/ans.md")?;
         writeln!(file, "{}", assistant_response)?;
-
         io::stdout().flush()?;
         Ok(())
     }
 
-    pub async fn handle_command(&mut self, command: &str, _client: &Client) -> Result<bool, Box<dyn std::error::Error>> {
+    pub async fn handle_command(&mut self, command: &str, client: &Client) -> Result<bool, Box<dyn std::error::Error>> {
         let parts: Vec<&str> = command.splitn(2, ' ').collect();
         match parts[0] {
             "quit" | "bye" | "q" => return Ok(true),
@@ -88,8 +108,19 @@ impl ChatSession {
                 }
             }
             "title" => {
-                self.add_message("summary the dialog as title", _client).await?;
-            }
+                //self.add_message("summary the dialog as title", _client).await?;
+                // Request the assistant to summarize the dialog as a title
+                let summary_prompt = "Summarize the conversation so far in one concise sentence suitable as a title.";
+                self.messages.push(ChatMessage::user(summary_prompt));
+                let chat_req = ChatRequest::new(self.messages.clone());
+                let chat_res = client.exec_chat(&self.model, chat_req, None).await?;
+                let response_text = chat_res.content_text_as_str().unwrap_or("NO_TITLE").to_string();
+                let filename = ChatSession::clean_filename(&response_text);
+                self.title = Some(filename.clone());
+                //self.title = Some(response_text.clone()); // Set the title
+                self.messages.pop(); // Remove the temporary "title" request from the history
+                println!("\x1b[32mSession title set to:\x1b[0m {}", filename);
+            }           
             "clear" => {
                 self.messages = vec![ChatMessage::system(
                     "You are a helpful AI assistant. Answer concisely and clearly.",
@@ -98,7 +129,8 @@ impl ChatSession {
             }
             "save" => {
                 if parts.len() > 1 {
-                    let filename = parts[1];
+                    let filename = ChatSession::clean_filename(parts[1]);
+                    //let mut filename = parts[1].to_string();
                     let sessions_dir = get_sessions_dir();
                     let filepath = sessions_dir.join(filename); // Construct full path in sessions dir
                     let state = self.get_session_state();
@@ -107,7 +139,18 @@ impl ChatSession {
                     serde_json::to_writer_pretty(writer, &state)?;
                     println!("Session saved to '{}'", filepath.display()); // Display full path
                 } else {
-                    println!("Usage: /save <filename>");
+                    // if self.title is set, use it as the filename
+                    if let Some(ref title) = self.title {
+                        let filename = ChatSession::clean_filename(title);
+                        let sessions_dir = get_sessions_dir();
+                        let filepath = sessions_dir.join(filename); // Construct full path in sessions dir
+                        let state = self.get_session_state();
+                        let file = File::create(&filepath)?; // Create file in sessions dir
+                        let writer = BufWriter::new(file);
+                        serde_json::to_writer_pretty(writer, &state)?;
+                        println!("Session saved to '{}'", filepath.display()); // Display full path
+                    }
+                    //println!("Usage: /save <filename>");
                 }
             } 
             "load" => {
@@ -175,14 +218,16 @@ impl ChatSession {
         SessionState {
             messages: self.messages.clone(),
             model: self.model.clone(),
-            // stream: self.stream,
-            // system_prompt:  // if you made system prompt changeable per session
+            stream: self.stream,
+            title: self.title.clone(),
+            system_prompt: self.system_prompt.clone(),
         }
     }
     fn load_session_state(&mut self, state: SessionState) {
         self.messages = state.messages;
         self.model = state.model;
-        // self.stream = state.stream;
-        // self.system_prompt = state.system_prompt;
+        self.stream = state.stream;
+        self.title = state.title;
+        self.system_prompt = state.system_prompt;
     }    
 }
