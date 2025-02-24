@@ -1,9 +1,11 @@
+// in src/interactive.rs
 use crate::chat_session::ChatSession;
 use crate::completion::CommandCompleter;
 use genai::Client;
 use rustyline::Editor;
 use rustyline::error::ReadlineError;
 use std::io::{self, Write};
+use crate::config::get_config_path;
 
 pub async fn interactive_mode(
     client: &Client,
@@ -15,9 +17,15 @@ pub async fn interactive_mode(
 
     let mut session = ChatSession::new(model.to_string(), stream);
 
-    let mut rl = Editor::<CommandCompleter>::new();
-    rl.set_helper(Some(CommandCompleter)); // Set the custom helper
+    let history_file = get_config_path().join("history.txt"); // Path to history file in config dir
+    let mut rl: Editor<CommandCompleter> = Editor::<CommandCompleter>::new().map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
+    rl.set_helper(Some(CommandCompleter));
     rl.bind_sequence(rustyline::KeyEvent(rustyline::KeyCode::Tab, rustyline::Modifiers::NONE), rustyline::Cmd::Complete);
+
+    // Load history from file on startup (if it exists)
+    if rl.load_history(&history_file).is_err() {
+        println!("No previous history found at '{}'", history_file.display());
+    }
 
     loop {
         let readline = rl.readline("User: ");
@@ -48,6 +56,7 @@ pub async fn interactive_mode(
                 }
 
                 if question.starts_with("/") {
+			        rl.add_history_entry(line.as_str());
                     let command = &question[1..]; // Remove the leading "/"
                     if session.handle_command(command, client).await? {
                         break;
@@ -71,6 +80,9 @@ pub async fn interactive_mode(
             }
         }
     }
+
+    // Save history to file on exit
+    rl.save_history(&history_file)?; // Use ? for error handling
 
     Ok(())
 }
