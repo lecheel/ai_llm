@@ -3,10 +3,12 @@ use genai::Client;
 use genai::chat::printer::{print_chat_stream, PrintChatStreamOptions};
 use std::io::{self, Write};
 use std::fs::File;
+use std::fs;
 use bat::Input;
 use std::io::{BufWriter,BufReader};
 use serde::{Deserialize, Serialize};
 use crate::config::get_sessions_dir;
+use chrono::prelude::*;
 
 #[derive(Serialize, Deserialize)]
 pub struct SessionState {
@@ -164,7 +166,32 @@ impl ChatSession {
                     self.load_session_state(state);
                     println!("Session loaded from '{}'", filepath.display()); // Display full path
                 } else {
-                    println!("Usage: /load <filename>");
+                    let sessions_dir = get_sessions_dir();
+                    let entries = fs::read_dir(sessions_dir)?.collect::<Vec<_>>();
+
+                    if entries.is_empty() {
+                        println!("No saved sessions found.");
+                    } else {
+                        println!("Saved sessions:");
+                        for entry in entries {
+                            let entry = entry?; // Handle potential error
+                            let path = entry.path();
+
+                            // Get the filename
+                            let filename = path.file_name().unwrap().to_str().unwrap();
+
+                            // Get the file's metadata
+                            let metadata = fs::metadata(&path)?;
+                            let modified_time = metadata.modified()?; // Get the last modification time
+
+                            // Convert the timestamp to a human-readable format
+                            let datetime: DateTime<Local> = modified_time.into();
+                            let formatted_date = datetime.format("%Y-%m-%d %H:%M:%S").to_string();
+
+                            // Print the filename and its modification date
+                            println!("- {} (Last Modified: {})", filename, formatted_date);
+                        }
+                    }
                 }
             }            
             "mic"  => {
