@@ -17,7 +17,7 @@ impl Completer for CommandCompleter {
         _ctx: &Context<'_>,
     ) -> rustyline::Result<(usize, Vec<Self::Candidate>)> {
         let commands = vec![
-            "/help", "/clear", "/quit", "/system", "/mic", "/cls",
+            "/help", "/clear", "/quit", "/system", "/save", "/load", "/title", "/mic", "/cls",
         ];
 
         let mut candidates = Vec::new();

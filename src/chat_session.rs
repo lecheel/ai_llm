@@ -4,6 +4,16 @@ use genai::chat::printer::{print_chat_stream, PrintChatStreamOptions};
 use std::io::{self, Write};
 use std::fs::File;
 use bat::Input;
+use std::io::{BufWriter,BufReader};
+use serde::{Deserialize, Serialize};
+
+#[derive(Serialize, Deserialize)]
+pub struct SessionState {
+    messages: Vec<ChatMessage>,
+    model: String,
+    // stream: bool, // Stream mode is often a CLI option, not session-specific
+    // system_prompt: String, // If you want to save custom system prompts per session
+}
 
 pub struct ChatSession {
     messages: Vec<ChatMessage>,
@@ -76,12 +86,39 @@ impl ChatSession {
                     println!("Usage: /system <new system prompt>");
                 }
             }
+            "title" => {
+                self.add_message("summary the dialog as title", _client).await?;
+            }
             "clear" => {
                 self.messages = vec![ChatMessage::system(
                     "You are a helpful AI assistant. Answer concisely and clearly.",
                 )];
                 println!("Conversation history cleared.");
             }
+            "save" => {
+                if parts.len() > 1 {
+                    let filename = parts[1];
+                    let state = self.get_session_state();
+                    let file = File::create(filename)?;
+                    let writer = BufWriter::new(file);
+                    serde_json::to_writer_pretty(writer, &state)?; // Or toml::to_string, yaml_rust::to_string
+                    println!("Session saved to '{}'", filename);
+                } else {
+                    println!("Usage: /save <filename>");
+                }
+            }
+            "load" => {
+                if parts.len() > 1 {
+                    let filename = parts[1];
+                    let file = File::open(filename)?;
+                    let reader = BufReader::new(file);
+                    let state: SessionState = serde_json::from_reader(reader)?; // Or toml::from_str, yaml_rust::from_str
+                    self.load_session_state(state);
+                    println!("Session loaded from '{}'", filename);
+                } else {
+                    println!("Usage: /load <filename>");
+                }
+            }            
             "mic"  => {
                 println!("Starting recording... Please speak now.");
                 let mut child = std::process::Command::new("asak")
@@ -118,6 +155,8 @@ impl ChatSession {
                 println!("/cls              - Clear the screen");
                 println!("/clear            - Clear conversation history");
                 println!("/mic              - Record audio using 'asak rec' and use the transcription as a query");
+                println!("/save <filename>  - Save the current session to a file");
+                println!("/load <filename>  - Load a session from a file");
                 println!("/help             - Show this help message");
             }
             _ => {
@@ -126,4 +165,19 @@ impl ChatSession {
         }
         Ok(false)
     }
+
+    fn get_session_state(&self) -> SessionState {
+        SessionState {
+            messages: self.messages.clone(),
+            model: self.model.clone(),
+            // stream: self.stream,
+            // system_prompt:  // if you made system prompt changeable per session
+        }
+    }
+    fn load_session_state(&mut self, state: SessionState) {
+        self.messages = state.messages;
+        self.model = state.model;
+        // self.stream = state.stream;
+        // self.system_prompt = state.system_prompt;
+    }    
 }
