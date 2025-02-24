@@ -9,6 +9,7 @@ use std::io::{BufWriter,BufReader};
 use serde::{Deserialize, Serialize};
 use crate::config::get_sessions_dir;
 use chrono::prelude::*;
+use crate::mic::mic_main;
 
 #[derive(Serialize, Deserialize)]
 pub struct SessionState {
@@ -106,7 +107,11 @@ impl ChatSession {
                     self.messages[0] = ChatMessage::system(system_message);
                     println!("Updated system prompt: {}", system_message);
                 } else {
-                    println!("Usage: /system <new system prompt>");
+                    // print PREDEFINED_ROLES 
+                    println!("Predefined roles:");
+                    for (role, description) in ChatSession::PREDEFINED_ROLES {
+                        println!("\x1b[33m{:<20}\x1b[0m - {}", role, description);
+                    }
                 }
             }
             "status" => {
@@ -201,38 +206,23 @@ impl ChatSession {
                             let formatted_date = datetime.format("%Y-%m-%d %H:%M:%S").to_string();
 
                             // Print the filename and its modification date
-                            println!("- {} (Last Modified: {})", filename, formatted_date);
+                            println!("- {} (\x1b[33mLast Modified: {}\x1b[0m)", filename, formatted_date);
                         }
                     }
                 }
             }            
             "mic"  => {
-                println!("Starting recording... Please speak now.");
-                let mut child = std::process::Command::new("asak")
-                    .arg("rec")
-                    .stdout(std::process::Stdio::inherit())
-                    .stderr(std::process::Stdio::inherit())
-                    .spawn()?;
-                let status = child.wait()?;
-                if status.success() {
-                    println!("Recording finished.");
-                    /*
-                    * TODO add this back with whisper API
-                    match std::fs::read_to_string("/tmp/mic.md") {
-                        Ok(content) => {
-                            let preview = content.lines().take(3).collect::<Vec<_>>().join("\n");
-                            println!("\x1b[33mTranscription preview:\x1b[0m\n{}", preview);
-                            println!("\x1b[32mMachine response:\x1b[0m");
-                            self.add_message(&content, client).await?;
-                        }
-                        Err(e) => {
-                            println!("Failed to read transcription file: {}", e);
-                        }
+                //println!("Starting recording... Please speak now.");
+                match mic_main() {
+                    Ok(true) => {
+                        println!(" ");
+                    },
+                    Ok(false) => {
+                        println!("Recording canceled.");
+                    },
+                    Err(e) => {
+                        println!("Error: {}", e);
                     }
-                    */
-
-                } else {
-                    println!("Error during recording. Ensure 'asak rec' is installed and functional.");
                 }
             }
             "help" | "?" => {

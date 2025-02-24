@@ -6,8 +6,9 @@ mod cli;
 mod chat_session;
 mod interactive;
 mod completion;
+mod mic;
 
-use config::{load_config, get_config_path, save_config, Config};
+use config::{load_config, get_config_dir, save_config, Config};
 use cli::{Cli, Commands, DEFAULT_MODEL, list_models, execute_query};
 use interactive::interactive_mode;
 use chat_session::ChatSession;
@@ -22,8 +23,8 @@ const BANNER : &str = r#"                   _
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let config_path = get_config_path();
-    let config = load_config(&config_path);
+    let _config_path = get_config_dir();
+    let config = load_config();
     let cli = Cli::parse();
 
     let model = cli.model
@@ -45,7 +46,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let new_config = Config {
                 default_model: Some(model.clone()),
             };
-            save_config(&config_path, &new_config)?;
+            save_config(&new_config)?;
             println!("Default model set to {}", model);
         }
         Some(Commands::Interactive) => {
