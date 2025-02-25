@@ -13,9 +13,9 @@ use std::path::PathBuf;
 use tokio::task::spawn_blocking;
 use std::sync::{Arc, Mutex};
 use std::fs;
-
 use fs2::FileExt; // For file locking
 use std::fs::OpenOptions;
+use std::fs::File;
 
 pub async fn interactive_mode(
     client: &Client,
@@ -24,6 +24,16 @@ pub async fn interactive_mode(
 ) -> Result<(), Box<dyn std::error::Error>> {
     println!("Interactive Mode (type 'q' to quit, '/help' for help)");
     println!("Using Model: \x1b[33m{}\x1b[0m", model);
+
+    // Step 1: Remove /tmp/mic.md at the beginning
+    let mic_file_path = PathBuf::from("/tmp/mic.md");
+    if mic_file_path.exists() {
+        if let Err(e) = fs::remove_file(&mic_file_path) {
+            eprintln!("Failed to remove /tmp/mic.md: {}", e);
+        }
+    }
+
+    // Initialize ChatSession and other components
     let mut session = ChatSession::new(model.to_string(), stream);
     let history_file = get_config_dir().join("history.txt"); // Path to history file in config dir
 
@@ -36,14 +46,6 @@ pub async fn interactive_mode(
         .unwrap()
         .bind_sequence(rustyline::KeyEvent(rustyline::KeyCode::Tab, rustyline::Modifiers::NONE), rustyline::Cmd::Complete);
 
-    // Step 1: Remove /tmp/mic.md at the beginning
-    let mic_file_path = PathBuf::from("/tmp/mic.md");
-    if mic_file_path.exists() {
-        if let Err(e) = fs::remove_file(&mic_file_path) {
-            eprintln!("Failed to remove /tmp/mic.md: {}", e);
-        } 
-    }
-
     // Load history from file on startup (if it exists)
     if rl.lock().unwrap().load_history(&history_file).is_err() {
         println!("No previous history found at '{}'", history_file.display());
@@ -51,17 +53,16 @@ pub async fn interactive_mode(
 
     // Create an asynchronous channel to receive file input
     let (tx, mut rx) = mpsc::channel::<String>(32); // Channel with buffer capacity 32
-    let file_path = PathBuf::from("/tmp/mic.md");
 
     // Spawn a background task to monitor /tmp/mic.md
-    let file_path_clone = file_path.clone();
+    let mic_file_path_clone = mic_file_path.clone();
     task::spawn(async move {
         let mut last_content = String::new(); // Store last read content
         loop {
             sleep(Duration::from_secs(2)).await; // Poll every 2 seconds (adjust as needed)
 
             // Open the file with exclusive lock
-            let file = match OpenOptions::new().read(true).write(true).open(&file_path_clone) {
+            let file = match OpenOptions::new().read(true).write(true).open(&mic_file_path_clone) {
                 Ok(file) => file,
                 Err(_) => continue, // Skip iteration if file cannot be opened
             };
@@ -73,7 +74,7 @@ pub async fn interactive_mode(
             }
 
             // Read the file content
-            let content = match std::fs::read_to_string(&file_path_clone) {
+            let content = match std::fs::read_to_string(&mic_file_path_clone) {
                 Ok(content) => content,
                 Err(_) => {
                     file.unlock().unwrap_or_else(|_| eprintln!("Failed to unlock /tmp/mic.md"));
@@ -89,6 +90,16 @@ pub async fn interactive_mode(
             // Process the content if it has changed
             if content != last_content && !content.trim().is_empty() {
                 last_content = content.clone(); // Update last content
+
+                // Step 3: Touch /tmp/act to indicate processing has started
+                let act_file_path = PathBuf::from("/tmp/act");
+                if let Err(e) = File::create(&act_file_path) {
+                    eprintln!("Failed to touch /tmp/act: {}", e);
+                } else {
+                    println!("\x1b[35mProcessing started, touched /tmp/act\x1b[0m");
+                }
+
+                // Indicate file input
                 println!(
                     "\x1b[35mFile input detected from /tmp/mic.md:\x1b[0m\n{}",
                     content.lines().take(3).collect::<Vec<_>>().join("\n")
@@ -175,6 +186,15 @@ pub async fn interactive_mode(
             },
             Some(file_content) = rx.recv() => {
                 println!("\x1b[32mMachine response (from /tmp/mic.md):\x1b[0m");
+
+                // Step 4: Write "OK" to /tmp/ai_ack after processing
+                let ai_ack_file_path = PathBuf::from("/tmp/ai_ack");
+                if let Err(e) = fs::write(&ai_ack_file_path, "OK") {
+                    eprintln!("Failed to write to /tmp/ai_ack: {}", e);
+                } else {
+                    println!("\x1b[32mWrote 'OK' to /tmp/ai_ack\x1b[0m");
+                }
+
                 session.add_message(&file_content, client).await?;
             }
         }
@@ -184,4 +204,3 @@ pub async fn interactive_mode(
     rl.lock().unwrap().save_history(&history_file)?; // Use ? for error handling
     Ok(())
 }
-
