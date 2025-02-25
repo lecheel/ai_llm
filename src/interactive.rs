@@ -6,6 +6,16 @@ use rustyline::Editor;
 use rustyline::error::ReadlineError;
 use std::io::{self, Write};
 use crate::config::get_config_dir;
+use tokio::sync::mpsc; 
+use tokio::task;
+use tokio::time::{sleep, Duration}; 
+use std::path::PathBuf;
+use tokio::task::spawn_blocking;
+use std::sync::{Arc, Mutex};
+use std::fs;
+
+use fs2::FileExt; // For file locking
+use std::fs::OpenOptions;
 
 pub async fn interactive_mode(
     client: &Client,
@@ -14,83 +24,164 @@ pub async fn interactive_mode(
 ) -> Result<(), Box<dyn std::error::Error>> {
     println!("Interactive Mode (type 'q' to quit, '/help' for help)");
     println!("Using Model: \x1b[33m{}\x1b[0m", model);
-
     let mut session = ChatSession::new(model.to_string(), stream);
-
     let history_file = get_config_dir().join("history.txt"); // Path to history file in config dir
-    let mut rl: Editor<CommandCompleter> = Editor::<CommandCompleter>::new().map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
-    rl.set_helper(Some(CommandCompleter));
-    rl.bind_sequence(rustyline::KeyEvent(rustyline::KeyCode::Tab, rustyline::Modifiers::NONE), rustyline::Cmd::Complete);
+
+    // Wrap `rl` in an Arc<Mutex<...>> for shared ownership and thread-safe access
+    let rl: Arc<Mutex<Editor<CommandCompleter>>> = Arc::new(Mutex::new(
+        Editor::<CommandCompleter>::new().map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?,
+    ));
+    rl.lock().unwrap().set_helper(Some(CommandCompleter));
+    rl.lock()
+        .unwrap()
+        .bind_sequence(rustyline::KeyEvent(rustyline::KeyCode::Tab, rustyline::Modifiers::NONE), rustyline::Cmd::Complete);
+
+    // Step 1: Remove /tmp/mic.md at the beginning
+    let mic_file_path = PathBuf::from("/tmp/mic.md");
+    if mic_file_path.exists() {
+        if let Err(e) = fs::remove_file(&mic_file_path) {
+            eprintln!("Failed to remove /tmp/mic.md: {}", e);
+        } 
+    }
 
     // Load history from file on startup (if it exists)
-    if rl.load_history(&history_file).is_err() {
+    if rl.lock().unwrap().load_history(&history_file).is_err() {
         println!("No previous history found at '{}'", history_file.display());
     }
 
+    // Create an asynchronous channel to receive file input
+    let (tx, mut rx) = mpsc::channel::<String>(32); // Channel with buffer capacity 32
+    let file_path = PathBuf::from("/tmp/mic.md");
+
+    // Spawn a background task to monitor /tmp/mic.md
+    let file_path_clone = file_path.clone();
+    task::spawn(async move {
+        let mut last_content = String::new(); // Store last read content
+        loop {
+            sleep(Duration::from_secs(2)).await; // Poll every 2 seconds (adjust as needed)
+
+            // Open the file with exclusive lock
+            let file = match OpenOptions::new().read(true).write(true).open(&file_path_clone) {
+                Ok(file) => file,
+                Err(_) => continue, // Skip iteration if file cannot be opened
+            };
+
+            // Lock the file exclusively
+            if let Err(_) = file.lock_exclusive() {
+                eprintln!("Failed to acquire lock on /tmp/mic.md");
+                continue;
+            }
+
+            // Read the file content
+            let content = match std::fs::read_to_string(&file_path_clone) {
+                Ok(content) => content,
+                Err(_) => {
+                    file.unlock().unwrap_or_else(|_| eprintln!("Failed to unlock /tmp/mic.md"));
+                    continue;
+                }
+            };
+
+            // Unlock the file
+            if let Err(_) = file.unlock() {
+                eprintln!("Failed to unlock /tmp/mic.md");
+            }
+
+            // Process the content if it has changed
+            if content != last_content && !content.trim().is_empty() {
+                last_content = content.clone(); // Update last content
+                println!(
+                    "\x1b[35mFile input detected from /tmp/mic.md:\x1b[0m\n{}",
+                    content.lines().take(3).collect::<Vec<_>>().join("\n")
+                ); // Indicate file input
+                if let Err(e) = tx.send(content).await {
+                    eprintln!("Error sending file content to channel: {}", e);
+                }
+            }
+        }
+    });
+
     loop {
-        let readline = rl.readline("User: ");
-        match readline {
-            Ok(line) => {
-                let question = line.trim();
+        // Clone the Arc for this iteration
+        let rl_clone = Arc::clone(&rl);
 
-                if question == "q" {
-                    break;
-                }
+        tokio::select! {
+            readline_result = spawn_blocking(move || {
+                // Lock the Mutex to access `rl`
+                let mut rl_guard = rl_clone.lock().unwrap();
+                rl_guard.readline("User: ")
+            }) => {
+                match readline_result {
+                    Ok(Ok(line)) => {
+                        let question = line.trim();
+                        if question == "q" {
+                            break;
+                        }
+                        if question == "cls" {
+                            print!("\x1b[2J");
+                            print!("\x1b[1;1H");
+                            continue;
+                        }
+                        if question == "jc" {
+                            // Open the file with exclusive lock
+                            let file = OpenOptions::new().read(true).write(true).open("/tmp/mic.md")?;
+                            file.lock_exclusive()?;
+                            let content = std::fs::read_to_string("/tmp/mic.md")?;
+                            file.unlock()?;
 
-                if question == "cls" {
-                    print!("\x1b[2J");
-                    print!("\x1b[1;1H");
-                    continue;
-                }
-                if question == "jc" {
-                    let content = std::fs::read_to_string("/tmp/mic.md")?;
-                    let preview = content.lines().take(3).collect::<Vec<_>>().join("\n");
-                    println!("\x1b[33mPreview:\x1b[0m --- load from /tmp/mic.md ---\n{}", preview);
-                    println!("\x1b[32mMachine response:\x1b[0m");
-                    session.add_message(&content, client).await?;
-                    continue;
-                }
-                if question == "mic" { // Treat "mic" as /mic command
-                    if session.handle_command("mic", client).await? {
-                        // TODO : Save mic content to /tmp/mic.md
+                            let preview = content.lines().take(3).collect::<Vec<_>>().join("\n");
+                            println!("\x1b[33mPreview:\x1b[0m --- load from /tmp/mic.md ---\n{}", preview);
+                            println!("\x1b[32mMachine response:\x1b[0m");
+                            session.add_message(&content, client).await?;
+                            continue;
+                        }
+                        if question == "mic" {
+                            if session.handle_command("mic", client).await? {
+                                // TODO: Save mic content to /tmp/mic.md
+                                continue;
+                            }
+                            continue;
+                        }
+                        if question.is_empty() {
+                            continue;
+                        }
+                        if question.starts_with("/") {
+                            rl.lock().unwrap().add_history_entry(line.as_str());
+                            let command = &question[1..];
+                            if session.handle_command(command, client).await? {
+                                break;
+                            }
+                        } else {
+                            session.add_message(question, client).await?;
+                        }
+                    }
+                    Ok(Err(ReadlineError::Interrupted)) => {
+                        println!("\x1b[2K\rUser:");
+                        io::stdout().flush().unwrap();
                         continue;
                     }
-                    continue; // If mic command is not handled, continue to the next iteration
-                }   
-
-                if question.is_empty() {
-                    continue;
-                }
-
-                if question.starts_with("/") {
-			        rl.add_history_entry(line.as_str());
-                    let command = &question[1..]; // Remove the leading "/"
-                    if session.handle_command(command, client).await? {
+                    Ok(Err(ReadlineError::Eof)) => {
+                        println!("CTRL-D Quitted");
                         break;
                     }
-                } else {
-                    session.add_message(question, client).await?;
+                    Ok(Err(err)) => {
+                        println!("Error: {:?}", err);
+                        break;
+                    }
+                    Err(join_err) => {
+                        eprintln!("Error spawning blocking task: {}", join_err);
+                        break;
+                    }
                 }
-            }
-            Err(ReadlineError::Interrupted) => {
-                println!("\x1b[2K\rUser:");
-                io::stdout().flush().unwrap();
-                continue;
-            }            
-            Err(ReadlineError::Eof) => {
-                println!("CTRL-D Quitted");
-                break;
-            }
-            Err(err) => {
-                println!("Error: {:?}", err);
-                break;
+            },
+            Some(file_content) = rx.recv() => {
+                println!("\x1b[32mMachine response (from /tmp/mic.md):\x1b[0m");
+                session.add_message(&file_content, client).await?;
             }
         }
     }
 
     // Save history to file on exit
-    //println!("Saving history to: '{}'", history_file.display());
-    rl.save_history(&history_file)?; // Use ? for error handling
-
+    rl.lock().unwrap().save_history(&history_file)?; // Use ? for error handling
     Ok(())
 }
+
