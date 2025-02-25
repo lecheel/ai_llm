@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use crate::config::{get_sessions_dir,AVAILABLE_MODELS};
 use chrono::prelude::*;
 use crate::mic::mic_main;
+use crate::completion::extract_model_name;
 
 #[derive(Serialize, Deserialize)]
 pub struct SessionState {
@@ -100,6 +101,7 @@ impl ChatSession {
             "cls" => {
                 print!("\x1b[2J");
                 print!("\x1b[1;1H");
+                io::stdout().flush().unwrap();
             }
             "system" => {
                 if parts.len() > 1 {
@@ -192,7 +194,6 @@ impl ChatSession {
                 } else {
                     let sessions_dir = get_sessions_dir();
                     let entries = fs::read_dir(sessions_dir)?.collect::<Vec<_>>();
-
                     if entries.is_empty() {
                         println!("No saved sessions found.");
                     } else {
@@ -200,24 +201,28 @@ impl ChatSession {
                         for entry in entries {
                             let entry = entry?; // Handle potential error
                             let path = entry.path();
-
                             // Get the filename
                             let filename = path.file_name().unwrap().to_str().unwrap();
-
                             // Get the file's metadata
                             let metadata = fs::metadata(&path)?;
                             let modified_time = metadata.modified()?; // Get the last modification time
-
                             // Convert the timestamp to a human-readable format
                             let datetime: DateTime<Local> = modified_time.into();
                             let formatted_date = datetime.format("%Y-%m-%d %H:%M:%S").to_string();
 
-                            // Print the filename and its modification date
-                            println!("- {} (\x1b[33mLast Modified: {}\x1b[0m)", filename, formatted_date);
+                            // Extract model name from the session file
+                            let model_name = match extract_model_name(&path) {
+                                Ok(model) => model,
+                                Err(_) => "Unknown".to_string(),
+                            };
+
+                            // Print the filename, modification date, and model name
+                            println!("- {} (\x1b[33mLast Modified: {}\x1b[0m) (\x1b[34m{}\x1b[0m)", 
+                                filename, formatted_date, model_name);
                         }
                     }
                 }
-            }            
+            }
             "mic"  => {
                 //println!("Starting recording... Please speak now.");
                 match mic_main() {

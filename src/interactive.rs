@@ -142,8 +142,9 @@ pub async fn interactive_mode(
                             break;
                         }
                         if question == "cls" {
-                            print!("\x1b[2J");
-                            print!("\x1b[1;1H");
+                            if session.handle_command("cls", client).await? {
+                                    continue;
+                                }
                             continue;
                         }
                         if question == "jc" {

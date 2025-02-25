@@ -8,6 +8,9 @@ use crate::config::get_sessions_dir;
 use std::fs;
 use std::borrow::Cow;
 use crate::config::AVAILABLE_MODELS;
+use serde_json::Value;
+use std::fs::File;
+use std::io::Read;
 
 pub struct CommandCompleter;
 
@@ -62,16 +65,21 @@ impl Completer for CommandCompleter {
             let sessions_dir = get_sessions_dir();
             let prefix = &lower_line[6..]; // Get the part after "/load "
             let mut candidates = Vec::new();
-
             if let Ok(entries) = fs::read_dir(sessions_dir) {
                 for entry in entries {
                     if let Ok(entry) = entry {
                         let path = entry.path();
                         if path.is_file() {
                             if let Some(filename) = path.file_name().and_then(|s| s.to_str()) {
+                                // Extract model name for the display
+                                let model_display = match extract_model_name(&path) {
+                                    Ok(model) => format!("{} ({})", filename, model),
+                                    Err(_) => filename.to_string(),
+                                };
+                                
                                 if prefix.is_empty() || filename.to_lowercase().starts_with(prefix) {
                                     candidates.push(Pair {
-                                        display: filename.to_string(),
+                                        display: model_display,
                                         replacement: filename.to_string(),
                                     });
                                 }
@@ -81,7 +89,6 @@ impl Completer for CommandCompleter {
                 }
             }
             return Ok((pos - prefix.len(), candidates));
-
         } else { // Default command completion
             let commands = vec![
                 "/help", "/clear", "/quit", "/system", "/mic", "/cls", 
@@ -120,3 +127,18 @@ impl Hinter for CommandCompleter {
 impl Validator for CommandCompleter {}
 
 impl Helper for CommandCompleter {}
+
+// Helper function to extract the model name from a JSON file
+pub fn extract_model_name(file_path: &std::path::Path) -> Result<String, String> {
+    let mut file = File::open(file_path).map_err(|e| e.to_string())?;
+    let mut contents = String::new();
+    file.read_to_string(&mut contents).map_err(|e| e.to_string())?;
+
+    let json: Value = serde_json::from_str(&contents).map_err(|e| e.to_string())?;
+    if let Some(model) = json.get("model").and_then(|m| m.as_str()) {
+        Ok(model.to_string())
+    } else {
+        Err("Model field not found".to_string())
+    }
+}
+
