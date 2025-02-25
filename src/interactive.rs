@@ -44,6 +44,8 @@ pub async fn interactive_mode(
 ) -> Result<(), Box<dyn std::error::Error>> {
     println!("Interactive Mode (type 'q' to quit, '/help' for help)");
     println!("Using model: \x1b[33m{}\x1b[0m", model);
+    
+    crate::config::load_wordlist();
 
     // Step 1: Remove /tmp/mic.md at the beginning
     let mic_file_path = PathBuf::from("/tmp/mic.md");

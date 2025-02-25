@@ -1,3 +1,4 @@
+// chat_session.rs
 use genai::chat::{ChatMessage, ChatRequest};
 use genai::Client;
 use genai::chat::printer::{print_chat_stream, PrintChatStreamOptions};
@@ -7,10 +8,12 @@ use std::fs;
 use bat::Input;
 use std::io::{BufWriter,BufReader};
 use serde::{Deserialize, Serialize};
-use crate::config::{get_sessions_dir,AVAILABLE_MODELS};
+use crate::config::{get_sessions_dir,AVAILABLE_MODELS,save_wordlist};
 use chrono::prelude::*;
 use crate::mic::mic_main;
 use crate::completion::extract_model_name;
+use crate::completion::{WORDLIST};
+use std::sync::MutexGuard;
 
 #[derive(Serialize, Deserialize)]
 pub struct SessionState {
@@ -97,7 +100,10 @@ impl ChatSession {
     pub async fn handle_command(&mut self, command: &str, client: &Client) -> Result<bool, Box<dyn std::error::Error>> {
         let parts: Vec<&str> = command.splitn(2, ' ').collect();
         match parts[0] {
-            "quit" | "bye" | "q" | "Q" => return Ok(true),
+            "quit" | "bye" | "q" | "Q" => {
+                return Ok(true);
+            },
+
             "cls" => {
                 print!("\x1b[2J");
                 print!("\x1b[1;1H");
@@ -158,6 +164,24 @@ impl ChatSession {
                 )];
                 println!("Conversation history cleared.");
             }
+            "word" => { // add word to wordlist
+                if parts.len() > 1 {
+                    let new_word = parts[1].trim().to_string();
+                    {
+                        let mut wordlist: MutexGuard<Vec<String>> = WORDLIST.lock().unwrap();
+                        if !wordlist.contains(&new_word) {
+                            wordlist.push(new_word.clone());
+                            println!("Word '{}' added to wordlist.", new_word);
+                        } else {
+                            println!("Word '{}' already in wordlist.", new_word);
+                            return Ok(false);
+                        }
+                    }
+                    tokio::task::spawn_blocking(|| save_wordlist()).await?;
+                } else {
+                    println!("Usage: /word <new_word>");
+                }
+            }            
             "save" => {
                 if parts.len() > 1 {
                     let filename = ChatSession::clean_filename(parts[1]);
@@ -247,6 +271,7 @@ impl ChatSession {
                 println!("/mic              - Record audio using 'asak rec' and use the transcription as a query");
                 println!("/save <filename>  - Save the current session to a file");
                 println!("/load <filename>  - Load a session from a file");
+                println!("/word <new_word>  - Add word to vocabulary");
                 println!("/help             - Show this help message");
             }
             _ => {

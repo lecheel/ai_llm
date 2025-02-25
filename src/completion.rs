@@ -1,3 +1,4 @@
+// completion.rs
 use rustyline::completion::{Completer, Pair};
 use rustyline::highlight::Highlighter;
 use rustyline::hint::Hinter;
@@ -5,51 +6,33 @@ use rustyline::validate::Validator;
 use rustyline::Helper;
 use rustyline::Context;
 use crate::config::get_sessions_dir;
-use crate::config::get_config_dir;
+//use crate::config::get_config_dir;
 use std::fs;
 use std::borrow::Cow;
-use crate::config::AVAILABLE_MODELS;
+use crate::config::{AVAILABLE_MODELS};
 use serde_json::Value;
 use std::fs::File;
 use std::io::Read;
-use std::io::BufRead;
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use lazy_static::lazy_static;
 
-lazy_static! {
-    // Load wordlist from config file at startup
-    static ref WORDLIST: Arc<Vec<String>> = {
-        load_wordlist().unwrap_or_else(|_| {
-            // Default wordlist if file can't be loaded
-            Arc::new(vec![
-                "apple".to_string(), "application".to_string(), 
-                "banana".to_string(), "blueberry".to_string(), 
-                "cherry".to_string(), "cranberry".to_string()
-            ])
-        })
-    };
-}
 
-// Function to load wordlist from config file
-fn load_wordlist() -> Result<Arc<Vec<String>>, std::io::Error> {
-    let config_dir = get_config_dir();
-    let wordlist_path = config_dir.join("wordlist.txt");
-    
-    let file = File::open(&wordlist_path)?;
-    let reader = std::io::BufReader::new(file);
-    
-    let mut words = Vec::new();
-    for line in reader.lines() {
-        if let Ok(word) = line {
-            let trimmed = word.trim().to_string();
-            if !trimmed.is_empty() {
-                words.push(trimmed);
-            }
-        }
-    }
-    
-    Ok(Arc::new(words))
+lazy_static! {
+    pub static ref WORDLIST: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(vec![
+        "apple".to_string(),
+        "application".to_string(),
+        "banana".to_string(),
+        "blueberry".to_string(),
+        "cherry".to_string(),
+        "cranberry".to_string(),
+        "date".to_string(),
+        "dragonfruit".to_string(),
+        "elderberry".to_string(),
+        "fig".to_string(),
+        "grape".to_string(),
+        "guava".to_string(),
+    ]));
 }
 
 pub struct CommandCompleter;
@@ -71,7 +54,7 @@ impl Completer for CommandCompleter {
                 // Complete command names
                 let commands = vec![
                     "/help", "/clear", "/quit", "/system", "/mic", "/cls",
-                    "/save", "/load", "/title", "/status", "/model",
+                    "/save", "/load", "/title", "/status", "/model", "/word",
                 ];
                 let mut candidates = Vec::new();
                 for command in &commands {
@@ -86,7 +69,8 @@ impl Completer for CommandCompleter {
             } else {
                 // Wordlist-based autocompletion for first word
                 let mut candidates = Vec::new();
-                for word in WORDLIST.iter() {
+                let wordlist = WORDLIST.lock().unwrap();
+                for word in wordlist.iter() {
                     if word.to_lowercase().starts_with(line_to_cursor) {
                         candidates.push(Pair {
                             display: word.clone(),
@@ -237,7 +221,8 @@ impl Completer for CommandCompleter {
             "/title" => {
                 // For multi-word titles, offer words from the wordlist
                 let mut candidates = Vec::new();
-                for word in WORDLIST.iter() {
+                let wordlist = WORDLIST.lock().unwrap();
+                for word in wordlist.iter() {
                     if word.to_lowercase().starts_with(current_word) {
                         candidates.push(Pair {
                             display: word.clone(),
@@ -247,11 +232,32 @@ impl Completer for CommandCompleter {
                 }
                 return Ok((current_word_start, candidates));
             },
+            "/word" => { // add word to wordlist
+                if words.len() == 2 {
+                    // Offer completion from existing wordlist, as a suggestion
+                    let mut candidates = Vec::new();
+                    let wordlist = WORDLIST.lock().unwrap();
+                    for word in wordlist.iter() {
+                        if word.to_lowercase().starts_with(current_word) {
+                            candidates.push(Pair {
+                                display: word.clone(),
+                                replacement: word.clone(),
+                            });
+                        }
+                    }
+                    return Ok((current_word_start, candidates));
+                } else {
+                    //No completion options after the word.
+                    return Ok((pos, Vec::new()));
+                }
+
+            }
             // Add more command-specific completions for other commands
             _ => {
                 // For any other command or non-command, do word completion from wordlist
                 let mut candidates = Vec::new();
-                for word in WORDLIST.iter() {
+                let wordlist = WORDLIST.lock().unwrap();
+                for word in wordlist.iter() {
                     if word.to_lowercase().starts_with(current_word) {
                         candidates.push(Pair {
                             display: word.clone(),
@@ -265,7 +271,8 @@ impl Completer for CommandCompleter {
         
         // Default case: use the wordlist for any word completion
         let mut candidates = Vec::new();
-        for word in WORDLIST.iter() {
+        let wordlist = WORDLIST.lock().unwrap();
+        for word in wordlist.iter() {
             if word.to_lowercase().starts_with(current_word) {
                 candidates.push(Pair {
                     display: word.clone(),
@@ -291,7 +298,8 @@ impl Highlighter for CommandCompleter {
             }
         } else {
             // Regular text highlighting
-            if WORDLIST.iter().any(|word| line.to_lowercase().starts_with(&word.to_lowercase())) {
+            let wordlist = WORDLIST.lock().unwrap();
+            if wordlist.iter().any(|word| line.to_lowercase().starts_with(&word.to_lowercase())) {
                 Cow::Owned(format!("\x1b[33m{}\x1b[0m", line))
             } else {
                 Cow::Borrowed(line)
@@ -320,3 +328,5 @@ pub fn extract_model_name(file_path: &std::path::Path) -> Result<String, String>
         Err("Model field not found".to_string())
     }
 }
+
+
