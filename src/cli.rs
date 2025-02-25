@@ -25,7 +25,7 @@ pub enum Commands {
         #[arg(short, long)]
         question: String,
     },
-    /// Set the default model in the config file
+    /// Set the default model in the config file [qwen2.5:14b, openthinker:7b, deepseek-coder-v2:16b, gemini-2.0-flash, deepseek-chat]
     SetDefault {
         /// The model to set as default
         model: String,
@@ -41,7 +41,7 @@ pub enum Commands {
     },
     /// Clear the conversation history
     Clear,
-    /// Record audio using 'asak rec' and use transcription as query
+    /// Record audio and use transcription as query
     Mic,
     /// Show help for interactive mode commands
     Help,

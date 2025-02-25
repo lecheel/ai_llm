@@ -139,7 +139,7 @@ impl ChatSession {
             "title" => {
                 //self.add_message("summary the dialog as title", _client).await?;
                 // Request the assistant to summarize the dialog as a title
-                let summary_prompt = "Summarize the conversation so far in one concise sentence suitable as a title.";
+                let summary_prompt = "Summarize the conversation so far in one concise sentence suitable as a title, no comma and dot";
                 self.messages.push(ChatMessage::user(summary_prompt));
                 let chat_req = ChatRequest::new(self.messages.clone());
                 let chat_res = client.exec_chat(&self.model, chat_req, None).await?;
@@ -160,26 +160,23 @@ impl ChatSession {
                 if parts.len() > 1 {
                     let filename = ChatSession::clean_filename(parts[1]);
                     //let mut filename = parts[1].to_string();
-                    let sessions_dir = get_sessions_dir();
-                    let filepath = sessions_dir.join(filename); // Construct full path in sessions dir
+                    let filepath = get_sessions_dir().join(filename.clone()); // Clone to use in join
                     let state = self.get_session_state();
                     let file = File::create(&filepath)?; // Create file in sessions dir
                     let writer = BufWriter::new(file);
                     serde_json::to_writer_pretty(writer, &state)?;
-                    println!("Session saved to '{}'", filepath.display()); // Display full path
+                    println!("Session saved to '{}'", filename);
                 } else {
                     // if self.title is set, use it as the filename
                     if let Some(ref title) = self.title {
                         let filename = ChatSession::clean_filename(title);
-                        let sessions_dir = get_sessions_dir();
-                        let filepath = sessions_dir.join(filename); // Construct full path in sessions dir
+                        let filepath = get_sessions_dir().join(filename.clone()); // Clone to use in join
                         let state = self.get_session_state();
                         let file = File::create(&filepath)?; // Create file in sessions dir
                         let writer = BufWriter::new(file);
                         serde_json::to_writer_pretty(writer, &state)?;
-                        println!("Session saved to '{}'", filepath.display()); // Display full path
+                        println!("Session saved to '{}'", filename); 
                     }
-                    //println!("Usage: /save <filename>");
                 }
             } 
             "load" => {
