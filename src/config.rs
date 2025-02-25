@@ -49,3 +49,12 @@ pub fn save_config(config: &Config) -> Result<(), Box<dyn std::error::Error>> {
     std::fs::write(&config_path, toml_str)?;
     Ok(())
 }
+
+pub const AVAILABLE_MODELS: &[&str] = &[
+    "grok-2",
+    "gemini-2.0-flash",
+    "deepseek-chat",
+    "deepseek-reasoner",
+    "openthinker:7b",
+    "qwen2.5:14b",
+];

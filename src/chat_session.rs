@@ -7,7 +7,7 @@ use std::fs;
 use bat::Input;
 use std::io::{BufWriter,BufReader};
 use serde::{Deserialize, Serialize};
-use crate::config::get_sessions_dir;
+use crate::config::{get_sessions_dir,AVAILABLE_MODELS};
 use chrono::prelude::*;
 use crate::mic::mic_main;
 
@@ -107,10 +107,20 @@ impl ChatSession {
                     self.messages[0] = ChatMessage::system(system_message);
                     println!("Updated system prompt: {}", system_message);
                 } else {
-                    // print PREDEFINED_ROLES 
                     println!("Predefined roles:");
                     for (role, description) in ChatSession::PREDEFINED_ROLES {
                         println!("\x1b[33m{:<20}\x1b[0m - {}", role, description);
+                    }
+                }
+            }
+            "model" => {
+                if parts.len() > 1 {
+                    self.model = parts[1].to_string();
+                    println!("Model set to: \x1b[33m{}\x1b[0m", self.model);
+                } else {
+                    println!("Available models:");
+                    for model in AVAILABLE_MODELS {
+                        println!("\x1b[33m  {}\x1b[0m", model);
                     }
                 }
             }

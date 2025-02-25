@@ -7,6 +7,7 @@ use rustyline::Context;
 use crate::config::get_sessions_dir;
 use std::fs;
 use std::borrow::Cow;
+use crate::config::AVAILABLE_MODELS;
 
 pub struct CommandCompleter;
 
@@ -42,6 +43,21 @@ impl Completer for CommandCompleter {
             return Ok((pos - prefix.len(), candidates));
         }
 
+        // completion for /model 
+        if lower_line.starts_with("/model ") {
+            let prefix = &lower_line[7..]; // Get the part after "/model "
+            let mut candidates = Vec::new();
+            for model in AVAILABLE_MODELS {
+                if model.starts_with(prefix) {
+                    candidates.push(Pair {
+                        display: model.to_string(),
+                        replacement: model.to_string(),
+                    });
+                }
+            }
+            return Ok((pos - prefix.len(), candidates));
+        }
+
         if lower_line.starts_with("/load ") { // Completion for /load command
             let sessions_dir = get_sessions_dir();
             let prefix = &lower_line[6..]; // Get the part after "/load "
@@ -69,7 +85,7 @@ impl Completer for CommandCompleter {
         } else { // Default command completion
             let commands = vec![
                 "/help", "/clear", "/quit", "/system", "/mic", "/cls", 
-                "/save", "/load", "/title", "/status",
+                "/save", "/load", "/title", "/status", "/model",
             ];
 
             let mut candidates = Vec::new();

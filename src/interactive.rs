@@ -50,6 +50,13 @@ pub async fn interactive_mode(
                     session.add_message(&content, client).await?;
                     continue;
                 }
+                if question == "mic" { // Treat "mic" as /mic command
+                    if session.handle_command("mic", client).await? {
+                        // TODO : Save mic content to /tmp/mic.md
+                        continue;
+                    }
+                    continue; // If mic command is not handled, continue to the next iteration
+                }   
 
                 if question.is_empty() {
                     continue;
