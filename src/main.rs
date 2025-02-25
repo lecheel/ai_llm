@@ -60,18 +60,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let mut session = ChatSession::new(model.clone(), cli.stream); // Create session to update system prompt
             session.handle_command(&format!("system {}", prompt), &client).await?;
         }
-        Some(Commands::Clear) => {
-            let mut session = ChatSession::new(model.clone(), cli.stream); // Create session to clear history
-            session.handle_command("clear", &client).await?;
-        }
-        Some(Commands::Mic) => {
-            let mut session = ChatSession::new(model.clone(), cli.stream); // Create session for mic input
-            session.handle_command("mic", &client).await?;
-        }
-        Some(Commands::Help) => {
-            let mut session = ChatSession::new(model.clone(), cli.stream); // Create session for help
-            session.handle_command("help", &client).await?;
-        }
     }
 
     Ok(())

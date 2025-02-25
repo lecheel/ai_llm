@@ -17,7 +17,8 @@ pub struct Cli {
 
 #[derive(Subcommand, Debug, Clone, PartialEq, Eq)]
 pub enum Commands {
-    /// List all available models
+    /// List all available models via `ls`
+    #[clap(alias = "ls")]
     ListModels,
     /// Run a single query and exit
     Query {
@@ -26,6 +27,7 @@ pub enum Commands {
         question: String,
     },
     /// Set the default model in the config file [qwen2.5:14b, openthinker:7b, deepseek-coder-v2:16b, gemini-2.0-flash, deepseek-chat]
+    #[clap(alias = "set")]
     SetDefault {
         /// The model to set as default
         model: String,
@@ -38,13 +40,7 @@ pub enum Commands {
     System {
         /// The system prompt to set
         prompt: String,
-    },
-    /// Clear the conversation history
-    Clear,
-    /// Record audio and use transcription as query
-    Mic,
-    /// Show help for interactive mode commands
-    Help,
+    }
 }
 
 pub async fn list_models(client: &Client) -> Result<(), Box<dyn std::error::Error>> {
