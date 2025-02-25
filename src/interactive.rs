@@ -15,7 +15,29 @@ use std::sync::{Arc, Mutex};
 use std::fs;
 use fs2::FileExt; // For file locking
 use std::fs::OpenOptions;
-use std::fs::File;
+//use std::fs::File;
+
+pub fn write_act() {
+    let act_file_path = PathBuf::from("/tmp/act");
+    println!("Writing to /tmp/act");
+    if let Err(e) = fs::write(&act_file_path, "busy") {
+        eprintln!("Failed to write to /tmp/act: {}", e);
+    }
+}
+
+pub fn write_ai_ack() {
+    println!("Writing to /tmp/ai_ack");
+    let act_file_path = PathBuf::from("/tmp/act");
+    if act_file_path.exists() {
+        if let Err(e) = fs::remove_file(&act_file_path) {
+            eprintln!("Failed to remove /tmp/act: {}", e);
+        }
+    }
+    let ai_ack_file_path = PathBuf::from("/tmp/ai_ack");
+    if let Err(e) = fs::write(&ai_ack_file_path, "OK") {
+        eprintln!("Failed to write to /tmp/ai_ack: {}", e);
+    }
+}
 
 pub async fn interactive_mode(
     client: &Client,
@@ -91,13 +113,7 @@ pub async fn interactive_mode(
             if content != last_content && !content.trim().is_empty() {
                 last_content = content.clone(); // Update last content
 
-                // Step 3: Touch /tmp/act to indicate processing has started
-                let act_file_path = PathBuf::from("/tmp/act");
-                if let Err(e) = File::create(&act_file_path) {
-                    eprintln!("Failed to touch /tmp/act: {}", e);
-                } else {
-                    println!("\x1b[35mProcessing started, touched /tmp/act\x1b[0m");
-                }
+                write_act();
 
                 // Indicate file input
                 println!(
@@ -133,6 +149,11 @@ pub async fn interactive_mode(
                             continue;
                         }
                         if question == "jc" {
+                            // check if /tmp/mic.md exists
+                            if !PathBuf::from("/tmp/mic.md").exists() {
+                                println!("Error: /tmp/mic.md does not exist");
+                                continue;
+                            }
                             // Open the file with exclusive lock
                             let file = OpenOptions::new().read(true).write(true).open("/tmp/mic.md")?;
                             file.lock_exclusive()?;
@@ -187,14 +208,7 @@ pub async fn interactive_mode(
             Some(file_content) = rx.recv() => {
                 println!("\x1b[32mMachine response (from /tmp/mic.md):\x1b[0m");
 
-                // Step 4: Write "OK" to /tmp/ai_ack after processing
-                let ai_ack_file_path = PathBuf::from("/tmp/ai_ack");
-                if let Err(e) = fs::write(&ai_ack_file_path, "OK") {
-                    eprintln!("Failed to write to /tmp/ai_ack: {}", e);
-                } else {
-                    println!("\x1b[32mWrote 'OK' to /tmp/ai_ack\x1b[0m");
-                }
-
+                write_ai_ack();
                 session.add_message(&file_content, client).await?;
             }
         }
