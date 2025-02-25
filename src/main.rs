@@ -25,22 +25,27 @@ const BANNER : &str = r#"                   _
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = load_config();
     let cli = Cli::parse();
-    let model = cli.model
-        .or(config.default_model)
-        .unwrap_or(DEFAULT_MODEL.to_string());
+
+    let model = cli.model.as_ref()
+        .or(config.default_model.as_ref())
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| DEFAULT_MODEL.to_string());
+    
     let client = Client::default();
 
     // Print the banner unless the `query` subcommand is used
     if !matches!(cli.command, Some(Commands::Query { .. })) {
         println!("{}", BANNER);
-    } else {
-        println!("Using model: {}", model);
     }
 
     match cli.command {
         Some(Commands::ListModels) => list_models(&client).await?,
-        Some(Commands::Query { question, stream }) => {
+        Some(Commands::Query { question, stream, model }) => {
+            let model = model.or(cli.model).unwrap_or_else(|| DEFAULT_MODEL.to_string());
+            println!("Using model: \x1b[93m{}\x1b[0m", model);
+            //println!("DEBUG: Using model: {}", model);
             execute_query(&client, &model, &question, stream).await?;
+
         }
         Some(Commands::SetDefault { model }) => {
             let new_config = Config {

@@ -34,6 +34,8 @@ pub enum Commands {
         /// Stream responses
         #[arg(short, long)]
         stream: bool,        
+        #[arg(short = 'm', long = "model")]
+        model: Option<String>,
     },
     /// Set the default model in the config file [qwen2.5:14b, openthinker:7b, deepseek-coder-v2:16b, gemini-2.0-flash, deepseek-chat]
     #[clap(alias = "set")]
