@@ -19,14 +19,12 @@ use std::fs::OpenOptions;
 
 pub fn write_act() {
     let act_file_path = PathBuf::from("/tmp/act");
-    println!("Writing to /tmp/act");
     if let Err(e) = fs::write(&act_file_path, "busy") {
         eprintln!("Failed to write to /tmp/act: {}", e);
     }
 }
 
 pub fn write_ai_ack() {
-    println!("Writing to /tmp/ai_ack");
     let act_file_path = PathBuf::from("/tmp/act");
     if act_file_path.exists() {
         if let Err(e) = fs::remove_file(&act_file_path) {
@@ -151,7 +149,7 @@ pub async fn interactive_mode(
                         if question == "jc" {
                             // check if /tmp/mic.md exists
                             if !PathBuf::from("/tmp/mic.md").exists() {
-                                println!("Error: /tmp/mic.md does not exist");
+                                println!("Skip: mic.md does not founded");
                                 continue;
                             }
                             // Open the file with exclusive lock
@@ -183,7 +181,9 @@ pub async fn interactive_mode(
                                 break;
                             }
                         } else {
+                            write_act();
                             session.add_message(question, client).await?;
+                            write_ai_ack();
                         }
                     }
                     Ok(Err(ReadlineError::Interrupted)) => {
