@@ -5,7 +5,13 @@ use genai::adapter::AdapterKind;
 pub const DEFAULT_MODEL: &str = "gemini-2.0-flash";
 
 #[derive(Parser)]
-#[command(author, version, about = "A CLI tool to interact with AI models", long_about = None)]
+#[command(
+    author,
+    version,
+    about = "A CLI tool to interact with AI models",
+    long_about = None,
+    after_help = "Note: llm query -q \"What is Rust?\" --stream"
+)]
 pub struct Cli {
     #[arg(short, long)]
     pub model: Option<String>,
@@ -25,6 +31,9 @@ pub enum Commands {
         /// The question to ask
         #[arg(short, long)]
         question: String,
+        /// Stream responses
+        #[arg(short, long)]
+        stream: bool,        
     },
     /// Set the default model in the config file [qwen2.5:14b, openthinker:7b, deepseek-coder-v2:16b, gemini-2.0-flash, deepseek-chat]
     #[clap(alias = "set")]
@@ -36,11 +45,6 @@ pub enum Commands {
     Interactive, // Default interactive mode
     /// Exit interactive mode
     Quit,
-    /// Set the system prompt
-    System {
-        /// The system prompt to set
-        prompt: String,
-    }
 }
 
 pub async fn list_models(client: &Client) -> Result<(), Box<dyn std::error::Error>> {
@@ -77,11 +81,11 @@ pub async fn execute_query(
     ]);
 
     if stream {
-        println!("\n--- Streaming Response:");
+        println!(" \x1b[92m󰼭 :\x1b[0m");
         let chat_res = client.exec_chat_stream(model, chat_req, None).await?;
         print_chat_stream(chat_res, Some(&PrintChatStreamOptions::from_print_events(false))).await?;
     } else {
-        println!("\n--- Response:");
+        println!(" \x1b[92m󱚠 :\x1b[0m");
         let chat_res = client.exec_chat(model, chat_req, None).await?;
         println!("{}", chat_res.content_text_as_str().unwrap_or("NO ANSWER"));
     }

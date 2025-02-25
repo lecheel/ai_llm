@@ -97,7 +97,7 @@ impl ChatSession {
     pub async fn handle_command(&mut self, command: &str, client: &Client) -> Result<bool, Box<dyn std::error::Error>> {
         let parts: Vec<&str> = command.splitn(2, ' ').collect();
         match parts[0] {
-            "quit" | "bye" | "q" => return Ok(true),
+            "quit" | "bye" | "q" | "Q" => return Ok(true),
             "cls" => {
                 print!("\x1b[2J");
                 print!("\x1b[1;1H");
