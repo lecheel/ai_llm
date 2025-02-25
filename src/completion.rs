@@ -12,6 +12,12 @@ use serde_json::Value;
 use std::fs::File;
 use std::io::Read;
 
+// Define a static wordlist for autocompletion
+const WORDLIST: &[&str] = &[
+    "apple", "application", "banana", "blueberry", "cherry", "cranberry",
+    "date", "dragonfruit", "elderberry", "fig", "grape", "guava",
+];
+
 pub struct CommandCompleter;
 
 impl Completer for CommandCompleter {
@@ -89,24 +95,38 @@ impl Completer for CommandCompleter {
                 }
             }
             return Ok((pos - prefix.len(), candidates));
-        } else { // Default command completion
-            let commands = vec![
-                "/help", "/clear", "/quit", "/system", "/mic", "/cls", 
-                "/save", "/load", "/title", "/status", "/model",
-            ];
+        }
 
+        // Wordlist-based autocompletion
+        if !lower_line.starts_with('/') {
+            let prefix = lower_line;
             let mut candidates = Vec::new();
-
-            for command in &commands {
-                if command.to_lowercase().starts_with(lower_line) {
+            for word in WORDLIST {
+                if word.starts_with(prefix) {
                     candidates.push(Pair {
-                        display: command.to_string(),
-                        replacement: command.to_string(),
+                        display: word.to_string(),
+                        replacement: word.to_string(),
                     });
                 }
             }
-            return Ok((pos - lower_line.len(), candidates));
+            return Ok((pos - prefix.len(), candidates));
         }
+
+        // Default command completion
+        let commands = vec![
+            "/help", "/clear", "/quit", "/system", "/mic", "/cls",
+            "/save", "/load", "/title", "/status", "/model",
+        ];
+        let mut candidates = Vec::new();
+        for command in &commands {
+            if command.to_lowercase().starts_with(lower_line) {
+                candidates.push(Pair {
+                    display: command.to_string(),
+                    replacement: command.to_string(),
+                });
+            }
+        }
+        Ok((pos - lower_line.len(), candidates))
     }
 }
 
@@ -116,8 +136,12 @@ impl Highlighter for CommandCompleter {
             // Highlight commands in green
             Cow::Owned(format!("\x1b[32m{}\x1b[0m", line)) // Return an owned String
         } else {
-            // Return the input unchanged (borrowed)
-            Cow::Borrowed(line)
+            // Highlight wordlist suggestions in yellow
+            if WORDLIST.iter().any(|word| word.starts_with(line)) {
+                Cow::Owned(format!("\x1b[33m{}\x1b[0m", line))
+            } else {
+                Cow::Borrowed(line)
+            }
         }
     }
 }
