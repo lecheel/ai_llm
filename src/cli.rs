@@ -16,7 +16,7 @@ pub struct Cli {
     #[arg(short, long)]
     pub model: Option<String>,
     #[arg(short, long)]
-    pub stream: bool,
+    pub stream: Option<bool>,
     #[command(subcommand)]
     pub command: Option<Commands>,
 }
@@ -33,7 +33,7 @@ pub enum Commands {
         question: String,
         /// Stream responses
         #[arg(short, long)]
-        stream: bool,        
+        stream: Option<bool>,        
         #[arg(short = 'm', long = "model")]
         model: Option<String>,
     },

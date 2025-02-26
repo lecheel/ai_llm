@@ -138,8 +138,12 @@ impl ChatSession {
                 if let genai::chat::MessageContent::Text(text) = &self.messages[0].content {
                     println!("System prompt: {}", text);
                 }   
-                //println!("System prompt: {:?}", self.messages);
-                //println!("Stream: {}", if self.stream { "ON" } else { "OFF" });
+                // stream 
+                if self.stream {
+                    println!("Stream mode: \x1b[32menabled\x1b[0m");
+                } else {
+                    println!("Stream mode: \x1b[31mdisabled\x1b[0m");
+                }
                 if let Some(ref title) = self.title {
                     println!("Title: {}", title);
                 }
@@ -261,11 +265,16 @@ impl ChatSession {
                     }
                 }
             }
+            "ss" => {
+                self.stream = !self.stream;
+                println!("Stream mode: {}", if self.stream { "ON" } else { "OFF" });
+            }
             "help" | "?" => {
                 println!("\nAvailable commands:");
                 println!("/quit, /q, /bye   - Exit interactive mode");
                 println!("/system           - Change system prompt (e.g., /system You are a coding assistant)");
                 println!("/status           - Show current model and title ...");
+                println!("/ss               - toggle stream mode");
                 println!("/cls              - Clear the screen");
                 println!("/clear            - Clear conversation history");
                 println!("/mic              - Record audio using 'asak rec' and use the transcription as a query");

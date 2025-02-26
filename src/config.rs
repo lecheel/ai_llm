@@ -12,6 +12,7 @@ const WORDLIST_FILE: &str = "wordlist.txt";
 #[derive(Deserialize, Serialize, Default)]
 pub struct Config {
     pub default_model: Option<String>,
+    pub stream: Option<bool>,
 }
 
 pub fn get_config_file_path() -> PathBuf {

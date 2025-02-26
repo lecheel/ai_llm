@@ -43,7 +43,7 @@ pub async fn interactive_mode(
     stream: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     println!("Interactive Mode (type 'q' to quit, '/help' for help)");
-    println!("Using model: \x1b[33m{}\x1b[0m", model);
+    println!("Using model: \x1b[33m{}\x1b[0m {}", model, if stream { "(stream)" } else { "" });
     
     crate::config::load_wordlist();
 

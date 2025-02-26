@@ -6,7 +6,6 @@ use rustyline::validate::Validator;
 use rustyline::Helper;
 use rustyline::Context;
 use crate::config::get_sessions_dir;
-//use crate::config::get_config_dir;
 use std::fs;
 use std::borrow::Cow;
 use crate::config::{AVAILABLE_MODELS};

@@ -26,11 +26,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = load_config();
     let cli = Cli::parse();
 
+    //println!("Config - default_model: {}, stream: {}", 
+    //config.default_model.unwrap_or("None".to_string()), 
+    //config.stream.unwrap_or(false));
+
     let model = cli.model.as_ref()
         .or(config.default_model.as_ref())
         .map(|s| s.to_string())
-        .unwrap_or_else(|| DEFAULT_MODEL.to_string());
-    
+        .unwrap_or_else(|| "default_model".to_string());
+    let stream: bool = cli.stream
+        .or(config.stream)
+        .unwrap_or(false);
+    //println!("Using stream: \x1b[93m{}\x1b[0m", stream);
+
     let client = Client::default();
 
     // Print the banner unless the `query` subcommand is used
@@ -42,19 +50,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some(Commands::ListModels) => list_models(&client).await?,
         Some(Commands::Query { question, stream, model }) => {
             let model = model.or(cli.model).unwrap_or_else(|| DEFAULT_MODEL.to_string());
+            let stream = stream.or(cli.stream).unwrap_or(false);
             println!("Using model: \x1b[93m{}\x1b[0m", model);
-            //println!("DEBUG: Using model: {}", model);
+            println!("stream: \x1b[93m{}\x1b[0m", stream);
             execute_query(&client, &model, &question, stream).await?;
 
         }
         Some(Commands::SetDefault { model }) => {
             let new_config = Config {
                 default_model: Some(model.clone()),
+                stream: cli.stream,
             };
             save_config(&new_config)?;
             println!("Default model set to {}", model);
         }
-        Some(Commands::Interactive) | None => interactive_mode(&client, &model, cli.stream).await?,
+        Some(Commands::Interactive) | None => interactive_mode(&client, &model, stream).await?,
         Some(Commands::Quit) => {},
         //Some(Commands::System { prompt }) => {
             //let mut session = chat_session::ChatSession::new(model.clone(), cli.stream);
