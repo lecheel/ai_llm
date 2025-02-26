@@ -64,7 +64,7 @@ pub fn load_wordlist() {
         match fs::read_to_string(&path) {
             Ok(data) => {
                 let words: Vec<String> = data.lines().map(String::from).collect();
-                let word_count = words.len(); // Calculate length before moving
+                let _word_count = words.len(); // Calculate length before moving
                 let mut wordlist = WORDLIST.lock().unwrap();
                 *wordlist = words; // Move happens here
                 //println!("Loaded {} words from {:?}", word_count, path); // Use word_count instead

@@ -12,7 +12,7 @@ use crate::config::{AVAILABLE_MODELS};
 use serde_json::Value;
 use std::fs::File;
 use std::io::Read;
-use std::path::Path;
+//use std::path::Path;
 use std::sync::{Arc, Mutex};
 use lazy_static::lazy_static;
 
@@ -43,7 +43,7 @@ impl Completer for CommandCompleter {
         &self,
         line: &str,
         pos: usize,
-        ctx: &Context<'_>,
+        _ctx: &Context<'_>,
     ) -> rustyline::Result<(usize, Vec<Self::Candidate>)> {
         let line_to_cursor = &line[..pos].to_lowercase();
         
