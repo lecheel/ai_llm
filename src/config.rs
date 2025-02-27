@@ -41,13 +41,13 @@ pub fn get_sessions_dir() -> PathBuf {
     }
 }
 
-pub fn load_config() -> Config { 
-    let config_path = get_config_file_path(); // Use get_config_file_path() internally
+pub fn load_config() -> Result<Config, Box<dyn std::error::Error>> {
+    let config_path = get_config_file_path();
     if let Ok(config_str) = std::fs::read_to_string(&config_path) {
-        //println!("Loaded config from {}", config_path.display());
-        toml::from_str(&config_str).unwrap_or_default()
+        let config = toml::from_str(&config_str)?;
+        Ok(config)
     } else {
-        Config::default()
+        Ok(Config::default()) 
     }
 }
 
@@ -77,8 +77,12 @@ pub fn load_wordlist() {
 }
 
 pub fn save_wordlist() {
-    let wordlist = WORDLIST.lock().unwrap();
-    let data = wordlist.join("\n");
+    let data = {
+        let wordlist = WORDLIST.lock().unwrap();
+        wordlist.join("\n")
+    }; // Lock is released here    
+    //let wordlist = WORDLIST.lock().unwrap();
+    //let data = wordlist.join("\n");
     let path = get_config_dir().join(WORDLIST_FILE); // Use config dir
     match fs::File::create(&path) {
         Ok(mut file) => {
@@ -103,5 +107,6 @@ pub const AVAILABLE_MODELS: &[&str] = &[
     "deepseek-reasoner",
     "openthinker:7b",
     "qwen2.5:14b",
+    "qwen-max",
 ];
 

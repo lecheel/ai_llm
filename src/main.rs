@@ -1,5 +1,10 @@
+// main.rs
 use clap::Parser;
-use genai::Client;
+use genai::adapter::AdapterKind;
+use genai::ModelIden;
+use genai::resolver::{AuthData, Endpoint, ServiceTargetResolver};
+use genai::{Client, ServiceTarget};
+use std::env;
 
 mod config;
 mod cli;
@@ -8,38 +13,51 @@ mod interactive;
 mod completion;
 mod mic;
 
+use genai::resolver::Error;
 use config::{load_config, save_config, Config};
 use cli::{Cli, Commands, DEFAULT_MODEL, list_models, execute_query};
 use interactive::interactive_mode;
-//use chat_session::ChatSession;
 
-const BANNER : &str = r#"                   _           
+const BANNER: &str = r#"                   _           
       ___ ___   __| | ___ _ __  2o25
      / __/ _ \ / _` |/ _ \ '__|
     | (_| (_) | (_| |  __/ |   
      \___\___/ \__,_|\___|_|  󰘦  󰊠  ● ● ● 
 "#;
 
-
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let config = load_config();
+    let config = load_config()?;
     let cli = Cli::parse();
 
-    //println!("Config - default_model: {}, stream: {}", 
-    //config.default_model.unwrap_or("None".to_string()), 
-    //config.stream.unwrap_or(false));
-
-    let model = cli.model.as_ref()
+    let model = cli
+        .model
+        .as_ref()
         .or(config.default_model.as_ref())
         .map(|s| s.to_string())
-        .unwrap_or_else(|| "default_model".to_string());
-    let stream: bool = cli.stream
-        .or(config.stream)
-        .unwrap_or(false);
-    //println!("Using stream: \x1b[93m{}\x1b[0m", stream);
+        .unwrap_or_else(|| DEFAULT_MODEL.to_string());
+    let stream: bool = cli.stream.or(config.stream).unwrap_or(false);
 
-    let client = Client::default();
+// TODO Custom resolver to add support for unsupported models (e.g., qwen-max)
+let target_resolver = ServiceTargetResolver::from_resolver_fn(
+    |service_target: ServiceTarget| -> Result<ServiceTarget, genai::resolver::Error> {
+        // Check the model name without destructuring
+        if service_target.model.model_name.to_string() == "qwen-max" {
+            let endpoint = Endpoint::from_static("https://dashscope.aliyuncs.com/compatible-mode/v1/");
+            // Instead of trying to print the endpoint directly
+            let auth = AuthData::from_env("QWEN_API_KEY");
+            //let model = ModelIden::new(AdapterKind::OpenAI, "qwen-max");
+            let model = ModelIden::new(AdapterKind::OpenAI, "deepseek-r1-distill-qwen-32b");
+            Ok(ServiceTarget { endpoint, auth, model })
+        } else {
+            Ok(service_target)
+        }
+    },
+);
+    // Build client with the custom resolver
+    let client = Client::builder()
+        .with_service_target_resolver(target_resolver)
+        .build();
 
     // Print the banner unless the `query` subcommand is used
     if !matches!(cli.command, Some(Commands::Query { .. })) {
@@ -48,13 +66,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     match cli.command {
         Some(Commands::ListModels) => list_models(&client).await?,
-        Some(Commands::Query { question, stream, model }) => {
+        Some(Commands::Query {
+            question,
+            stream,
+            model,
+        }) => {
             let model = model.or(cli.model).unwrap_or_else(|| DEFAULT_MODEL.to_string());
             let stream = stream.or(cli.stream).unwrap_or(false);
             println!("Using model: \x1b[93m{}\x1b[0m", model);
             println!("stream: \x1b[93m{}\x1b[0m", stream);
             execute_query(&client, &model, &question, stream).await?;
-
         }
         Some(Commands::SetDefault { model }) => {
             let new_config = Config {
@@ -65,11 +86,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("Default model set to {}", model);
         }
         Some(Commands::Interactive) | None => interactive_mode(&client, &model, stream).await?,
-        Some(Commands::Quit) => {},
-        //Some(Commands::System { prompt }) => {
-            //let mut session = chat_session::ChatSession::new(model.clone(), cli.stream);
-            //session.handle_command(&format!("system {}", prompt), &client).await?;
-        //}
+        Some(Commands::Quit) => {}
     }
 
     Ok(())
