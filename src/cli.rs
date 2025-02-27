@@ -23,8 +23,8 @@ pub struct Cli {
 
 #[derive(Subcommand, Debug, Clone, PartialEq, Eq)]
 pub enum Commands {
-    /// List all available models via `ls`
-    #[clap(alias = "ls")]
+    /// List all available models via `--ls`
+    #[clap(alias = "--ls")]
     ListModels,
     /// Run a single query and exit
     Query {
