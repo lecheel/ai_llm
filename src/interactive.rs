@@ -42,7 +42,7 @@ pub async fn interactive_mode(
     model: &str,
     stream: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    println!("Interactive Mode (type 'q' to quit, '/help' for help)");
+    println!("\x1b[43m\x1b[30m Interactive Mode \x1b[0m\x1b[33m\x1b[0m (type 'q' to quit, '/help' for help)");
     println!("Using model: \x1b[33m{}\x1b[0m {}", model, if stream { "(stream)" } else { "" });
     
     crate::config::load_wordlist();
@@ -127,6 +127,9 @@ pub async fn interactive_mode(
         }
     });
 
+    // Variable to store the last user input
+    let mut last_input = String::new();
+
     loop {
         // Clone the Arc for this iteration
         let rl_clone = Arc::clone(&rl);
@@ -140,6 +143,19 @@ pub async fn interactive_mode(
                 match readline_result {
                     Ok(Ok(line)) => {
                         let question = line.trim();
+                        // dot command 
+                        if question == "." {
+                            // Repeat the last input
+                            if last_input.is_empty() {
+                                println!("No previous input to repeat.");
+                                continue;
+                            }
+                            println!("\x1b[92m\r \x1b[0m: {}", last_input);
+                            write_act();
+                            session.add_message(&last_input, client).await?;
+                            write_ai_ack();
+                            continue;
+                        }
                         if question == "q" {
                             break;
                         }
@@ -184,6 +200,8 @@ pub async fn interactive_mode(
                                 break;
                             }
                         } else {
+                            // Store the current input as the last input
+                            last_input = question.to_string();
                             write_act();
                             session.add_message(question, client).await?;
                             write_ai_ack();
@@ -221,3 +239,4 @@ pub async fn interactive_mode(
     rl.lock().unwrap().save_history(&history_file)?; // Use ? for error handling
     Ok(())
 }
+
