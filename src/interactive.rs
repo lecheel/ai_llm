@@ -117,7 +117,7 @@ pub async fn interactive_mode(
 
                 // Indicate file input
                 println!(
-                    "\x1b[35mFile input detected from /tmp/mic.md:\x1b[0m\n{}",
+                    "\x1b[35m /tmp/mic.md\x1b[0m\n{}",
                     content.lines().take(3).collect::<Vec<_>>().join("\n")
                 ); // Indicate file input
                 if let Err(e) = tx.send(content).await {
@@ -169,9 +169,11 @@ pub async fn interactive_mode(
                             // check if /tmp/mic.md exists
                             if !PathBuf::from("/tmp/mic.md").exists() {
                                 println!("Skip: mic.md does not founded");
+
                                 continue;
                             }
                             // Open the file with exclusive lock
+
                             let file = OpenOptions::new().read(true).write(true).open("/tmp/mic.md")?;
                             file.lock_exclusive()?;
                             let content = std::fs::read_to_string("/tmp/mic.md")?;
@@ -221,13 +223,13 @@ pub async fn interactive_mode(
                         break;
                     }
                     Err(join_err) => {
-                        eprintln!("Error spawning blocking task: {}", join_err);
+                        eprintln!("Failed to start background task: {}", join_err);
                         break;
                     }
                 }
             },
             Some(file_content) = rx.recv() => {
-                println!("\x1b[32mMachine response (from /tmp/mic.md):\x1b[0m");
+                println!("\x1b[32mRespone from machine (based on /tmp/mic.md):\x1b[0m");
 
                 write_ai_ack();
                 session.add_message(&file_content, client).await?;
