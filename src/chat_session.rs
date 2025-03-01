@@ -22,6 +22,7 @@ pub struct SessionState {
     stream: bool, // Stream mode is often a CLI option, not session-specific
     title: Option<String>,
     system_prompt: String, // If you want to save custom system prompts per session
+    user_prompt: String,
 }
 
 pub struct ChatSession {
@@ -30,6 +31,7 @@ pub struct ChatSession {
     stream: bool,
     title: Option<String>,
     system_prompt: String,
+    user_prompt: String,
 }
 
 impl ChatSession {
@@ -41,7 +43,7 @@ impl ChatSession {
         ("general_knowledge", "You are a general knowledge assistant. Answer questions on a wide range of topics concisely and clearly."),
     ];
 
-    pub fn new(model: String, stream: bool) -> Self {
+    pub fn new(model: String, stream: bool, user_prompt: String) -> Self {
         let initial_messages = vec![ChatMessage::system(
             "You are a helpful AI assistant. Answer concisely and clearly.",
         )];
@@ -51,6 +53,7 @@ impl ChatSession {
             stream,
             title: None,
             system_prompt: String::new(),
+            user_prompt,
         }
     }
 
@@ -114,6 +117,10 @@ impl ChatSession {
                     let system_message = parts[1];
                     self.messages[0] = ChatMessage::system(system_message);
                     println!("Updated system prompt: {}", system_message);
+                    println!("System prompt set to: \x1b[33m{}\x1b[0m", system_message);
+                    let adv_prompt = format!("\x1b[32m{}>\x1b[0m", system_message);
+                    self.user_prompt = adv_prompt;
+
                 } else {
                     println!("Predefined roles:");
                     for (role, description) in ChatSession::PREDEFINED_ROLES {
@@ -290,6 +297,10 @@ impl ChatSession {
         Ok(false)
     }
 
+    pub fn get_user_prompt(&self) -> String {
+        self.user_prompt.clone()
+    }
+
     fn get_session_state(&self) -> SessionState {
         SessionState {
             messages: self.messages.clone(),
@@ -297,6 +308,7 @@ impl ChatSession {
             stream: self.stream,
             title: self.title.clone(),
             system_prompt: self.system_prompt.clone(),
+            user_prompt: self.user_prompt.clone(),
         }
     }
     fn load_session_state(&mut self, state: SessionState) {
@@ -305,5 +317,6 @@ impl ChatSession {
         self.stream = state.stream;
         self.title = state.title;
         self.system_prompt = state.system_prompt;
+        self.user_prompt = state.user_prompt;
     }    
 }

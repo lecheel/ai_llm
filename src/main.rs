@@ -37,23 +37,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .map(|s| s.to_string())
         .unwrap_or_else(|| DEFAULT_MODEL.to_string());
     let stream: bool = cli.stream.or(config.stream).unwrap_or(false);
+    let user_prompt: String = env::var("USER_PROMPT").unwrap_or("\x1b[93m>\x1b[0m".to_string());
 
-// TODO Custom resolver to add support for unsupported models (e.g., qwen-max)
-let target_resolver = ServiceTargetResolver::from_resolver_fn(
-    |service_target: ServiceTarget| -> Result<ServiceTarget, genai::resolver::Error> {
-        // Check the model name without destructuring
-        if service_target.model.model_name.to_string() == "qwen-max" {
-            let endpoint = Endpoint::from_static("https://dashscope.aliyuncs.com/compatible-mode/v1/");
-            // Instead of trying to print the endpoint directly
-            let auth = AuthData::from_env("QWEN_API_KEY");
-            //let model = ModelIden::new(AdapterKind::OpenAI, "qwen-max");
-            let model = ModelIden::new(AdapterKind::OpenAI, "deepseek-r1-distill-qwen-32b");
-            Ok(ServiceTarget { endpoint, auth, model })
-        } else {
-            Ok(service_target)
-        }
-    },
-);
+    // TODO Custom resolver to add support for unsupported models (e.g., qwen-max)
+    let target_resolver = ServiceTargetResolver::from_resolver_fn(
+        |service_target: ServiceTarget| -> Result<ServiceTarget, genai::resolver::Error> {
+            // Check the model name without destructuring
+            if service_target.model.model_name.to_string() == "qwen-max" {
+                let endpoint = Endpoint::from_static("https://dashscope.aliyuncs.com/compatible-mode/v1/");
+                // Instead of trying to print the endpoint directly
+                let auth = AuthData::from_env("QWEN_API_KEY");
+                //let model = ModelIden::new(AdapterKind::OpenAI, "qwen-max");
+                let model = ModelIden::new(AdapterKind::OpenAI, "deepseek-r1-distill-qwen-32b");
+                Ok(ServiceTarget { endpoint, auth, model })
+            } else {
+                Ok(service_target)
+            }
+        },
+    );
     // Build client with the custom resolver
     let client = Client::builder()
         .with_service_target_resolver(target_resolver)
@@ -85,7 +86,7 @@ let target_resolver = ServiceTargetResolver::from_resolver_fn(
             save_config(&new_config)?;
             println!("Default model set to {}", model);
         }
-        Some(Commands::Interactive) | None => interactive_mode(&client, &model, stream).await?,
+        Some(Commands::Interactive) | None => interactive_mode(&client, &model, stream, &user_prompt).await?,
         Some(Commands::Quit) => {}
     }
 

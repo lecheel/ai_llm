@@ -43,10 +43,15 @@ pub async fn interactive_mode(
     client: &Client,
     model: &str,
     stream: bool,
+    user_prompt: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
+
     println!("\x1b[43m\x1b[30m Interactive Mode \x1b[0m\x1b[33m\x1b[0m (type 'q' to quit, '/help' for help)");
     println!("Using model: \x1b[33m{}\x1b[0m {}", model, if stream { "(stream)" } else { "" });
+ 
+    //println!("{}", user_prompt);
     crate::config::load_wordlist();
+
     // Step 1: Remove /tmp/mic.md at the beginning
     let mic_file_path = PathBuf::from("/tmp/mic.md");
     if mic_file_path.exists() {
@@ -55,7 +60,7 @@ pub async fn interactive_mode(
         }
     }
     // Initialize ChatSession and other components
-    let mut session = ChatSession::new(model.to_string(), stream);
+    let mut session = ChatSession::new(model.to_string(), stream, user_prompt.to_string());
     let history_file = get_config_dir().join("history.txt"); // Path to history file in config dir
     // Wrap `rl` in an Arc<Mutex<...>> for shared ownership and thread-safe access
     let rl: Arc<Mutex<Editor<CommandCompleter>>> = Arc::new(Mutex::new(
@@ -118,14 +123,17 @@ pub async fn interactive_mode(
     let mut last_input = String::new();
     // Flag to track if we should exit
     let mut should_exit = false;
-    
+    // Extract prompt outside the loop
+    let prompt = user_prompt.to_string();
+
     while !should_exit {
+        let prompt = session.get_user_prompt().to_string();
         // Get user input using spawn_blocking for the readline operation
         let rl_clone = Arc::clone(&rl);
         let readline_result = tokio::select! {
             result = spawn_blocking(move || {
                 let mut rl_guard = rl_clone.lock().unwrap();
-                rl_guard.readline("User: ")
+                rl_guard.readline(&prompt)
             }) => Some(result),
             
             Some(file_content) = rx.recv() => {
