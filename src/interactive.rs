@@ -42,11 +42,9 @@ pub async fn interactive_mode(
     model: &str,
     stream: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    println!("\x1b[43m\x1b[30m Interactive Mode \x1b[0m\x1b[33m\x1b[0m (type 'q' to quit, '/help' for help)");
+    println!("\x1b[43m\x1b[30m Interactive Mode \x1b[0m\x1b[33m\x1b[0m (type 'q' to quit, '/help' for help)");
     println!("Using model: \x1b[33m{}\x1b[0m {}", model, if stream { "(stream)" } else { "" });
-    
     crate::config::load_wordlist();
-
     // Step 1: Remove /tmp/mic.md at the beginning
     let mic_file_path = PathBuf::from("/tmp/mic.md");
     if mic_file_path.exists() {
@@ -54,11 +52,9 @@ pub async fn interactive_mode(
             eprintln!("Failed to remove /tmp/mic.md: {}", e);
         }
     }
-
     // Initialize ChatSession and other components
     let mut session = ChatSession::new(model.to_string(), stream);
     let history_file = get_config_dir().join("history.txt"); // Path to history file in config dir
-
     // Wrap `rl` in an Arc<Mutex<...>> for shared ownership and thread-safe access
     let rl: Arc<Mutex<Editor<CommandCompleter>>> = Arc::new(Mutex::new(
         Editor::<CommandCompleter>::new().map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?,
@@ -67,34 +63,28 @@ pub async fn interactive_mode(
     rl.lock()
         .unwrap()
         .bind_sequence(rustyline::KeyEvent(rustyline::KeyCode::Tab, rustyline::Modifiers::NONE), rustyline::Cmd::Complete);
-
     // Load history from file on startup (if it exists)
     if rl.lock().unwrap().load_history(&history_file).is_err() {
         println!("No previous history found at '{}'", history_file.display());
     }
-
     // Create an asynchronous channel to receive file input
     let (tx, mut rx) = mpsc::channel::<String>(32); // Channel with buffer capacity 32
-
     // Spawn a background task to monitor /tmp/mic.md
     let mic_file_path_clone = mic_file_path.clone();
-    task::spawn(async move {
+    let file_monitor_handle = task::spawn(async move {
         let mut last_content = String::new(); // Store last read content
         loop {
             sleep(Duration::from_secs(2)).await; // Poll every 2 seconds (adjust as needed)
-
             // Open the file with exclusive lock
             let file = match OpenOptions::new().read(true).write(true).open(&mic_file_path_clone) {
                 Ok(file) => file,
                 Err(_) => continue, // Skip iteration if file cannot be opened
             };
-
             // Lock the file exclusively
             if let Err(_) = file.lock_exclusive() {
                 eprintln!("Failed to acquire lock on /tmp/mic.md");
                 continue;
             }
-
             // Read the file content
             let content = match std::fs::read_to_string(&mic_file_path_clone) {
                 Ok(content) => content,
@@ -103,21 +93,17 @@ pub async fn interactive_mode(
                     continue;
                 }
             };
-
             // Unlock the file
             if let Err(_) = file.unlock() {
                 eprintln!("Failed to unlock /tmp/mic.md");
             }
-
             // Process the content if it has changed
             if content != last_content && !content.trim().is_empty() {
                 last_content = content.clone(); // Update last content
-
                 write_act();
-
                 // Indicate file input
                 println!(
-                    "\x1b[35m /tmp/mic.md\x1b[0m\n{}",
+                    "\x1b[35m /tmp/mic.md\x1b[0m\n{}",
                     content.lines().take(3).collect::<Vec<_>>().join("\n")
                 ); // Indicate file input
                 if let Err(e) = tx.send(content).await {
@@ -126,20 +112,33 @@ pub async fn interactive_mode(
             }
         }
     });
-
     // Variable to store the last user input
     let mut last_input = String::new();
-
+    // Track whether we need to create a new readline task
+    let mut readline_task = None;
+    
     loop {
-        // Clone the Arc for this iteration
-        let rl_clone = Arc::clone(&rl);
-
-        tokio::select! {
-            readline_result = spawn_blocking(move || {
+        // Start a new readline task if one isn't running
+        if readline_task.is_none() {
+            let rl_clone = Arc::clone(&rl);
+            readline_task = Some(spawn_blocking(move || {
                 // Lock the Mutex to access `rl`
                 let mut rl_guard = rl_clone.lock().unwrap();
                 rl_guard.readline("User: ")
-            }) => {
+            }));
+        }
+        
+        tokio::select! {
+            readline_result = async { 
+                if let Some(task) = &mut readline_task {
+                    task.await
+                } else {
+                    Ok(Err(ReadlineError::Interrupted))
+                }
+            } => {
+                // Mark task as complete
+                readline_task = None;
+                
                 match readline_result {
                     Ok(Ok(line)) => {
                         let question = line.trim();
@@ -150,13 +149,15 @@ pub async fn interactive_mode(
                                 println!("No previous input to repeat.");
                                 continue;
                             }
-                            println!("\x1b[92m\r \x1b[0m: {}", last_input);
+                            println!("\x1b[92m\r \x1b[0m: {}", last_input);
                             write_act();
                             session.add_message(&last_input, client).await?;
-                            write_ai_ack();
+                            //write_ai_ack();
                             continue;
                         }
                         if question == "q" {
+                            // Abort the file monitoring task
+                            file_monitor_handle.abort();
                             break;
                         }
                         if question == "cls" {
@@ -169,16 +170,13 @@ pub async fn interactive_mode(
                             // check if /tmp/mic.md exists
                             if !PathBuf::from("/tmp/mic.md").exists() {
                                 println!("Skip: mic.md does not founded");
-
                                 continue;
                             }
                             // Open the file with exclusive lock
-
                             let file = OpenOptions::new().read(true).write(true).open("/tmp/mic.md")?;
                             file.lock_exclusive()?;
                             let content = std::fs::read_to_string("/tmp/mic.md")?;
                             file.unlock()?;
-
                             let preview = content.lines().take(3).collect::<Vec<_>>().join("\n");
                             println!("\x1b[33mPreview:\x1b[0m --- load from /tmp/mic.md ---\n{}", preview);
                             println!("\x1b[32mMachine response:\x1b[0m");
@@ -210,8 +208,6 @@ pub async fn interactive_mode(
                         }
                     }
                     Ok(Err(ReadlineError::Interrupted)) => {
-                        println!("\x1b[2K\rUser:");
-                        io::stdout().flush().unwrap();
                         continue;
                     }
                     Ok(Err(ReadlineError::Eof)) => {
@@ -229,16 +225,21 @@ pub async fn interactive_mode(
                 }
             },
             Some(file_content) = rx.recv() => {
-                println!("\x1b[32mRespone from machine (based on /tmp/mic.md):\x1b[0m");
-
+                // Cancel any active readline task to prevent the multiple Enter key issue
+                if let Some(task) = readline_task.take() {
+                    task.abort();
+                }
+                
+                println!("\x1b[32mResponse from machine (based on /tmp/mic.md):\x1b[0m");
                 write_ai_ack();
                 session.add_message(&file_content, client).await?;
+                
+                // Don't immediately start a new readline task
+                // It will be started at the beginning of the next loop iteration
             }
         }
     }
-
-    // Save history to file on exit
-    rl.lock().unwrap().save_history(&history_file)?; // Use ? for error handling
+    // Clean up and exit
+    println!("Exiting interactive mode.");
     Ok(())
 }
-
