@@ -114,131 +114,119 @@ pub async fn interactive_mode(
     });
     // Variable to store the last user input
     let mut last_input = String::new();
-    // Track whether we need to create a new readline task
-    let mut readline_task = None;
     
-    loop {
-        // Start a new readline task if one isn't running
-        if readline_task.is_none() {
-            let rl_clone = Arc::clone(&rl);
-            readline_task = Some(spawn_blocking(move || {
-                // Lock the Mutex to access `rl`
+    // Flag to track if we should exit
+    let mut should_exit = false;
+    
+    while !should_exit {
+        // Get user input using spawn_blocking for the readline operation
+        let rl_clone = Arc::clone(&rl);
+        let readline_result = tokio::select! {
+            result = spawn_blocking(move || {
                 let mut rl_guard = rl_clone.lock().unwrap();
                 rl_guard.readline("User: ")
-            }));
-        }
-        
-        tokio::select! {
-            readline_result = async { 
-                if let Some(task) = &mut readline_task {
-                    task.await
-                } else {
-                    Ok(Err(ReadlineError::Interrupted))
-                }
-            } => {
-                // Mark task as complete
-                readline_task = None;
-                
-                match readline_result {
-                    Ok(Ok(line)) => {
-                        let question = line.trim();
-                        // dot command 
-                        if question == "." {
-                            // Repeat the last input
-                            if last_input.is_empty() {
-                                println!("No previous input to repeat.");
-                                continue;
-                            }
-                            println!("\x1b[92m\r \x1b[0m: {}", last_input);
-                            write_act();
-                            session.add_message(&last_input, client).await?;
-                            //write_ai_ack();
-                            continue;
-                        }
-                        if question == "q" {
-                            // Abort the file monitoring task
-                            file_monitor_handle.abort();
-                            break;
-                        }
-                        if question == "cls" {
-                            if session.handle_command("cls", client).await? {
-                                    continue;
-                                }
-                            continue;
-                        }
-                        if question == "jc" {
-                            // check if /tmp/mic.md exists
-                            if !PathBuf::from("/tmp/mic.md").exists() {
-                                println!("Skip: mic.md does not founded");
-                                continue;
-                            }
-                            // Open the file with exclusive lock
-                            let file = OpenOptions::new().read(true).write(true).open("/tmp/mic.md")?;
-                            file.lock_exclusive()?;
-                            let content = std::fs::read_to_string("/tmp/mic.md")?;
-                            file.unlock()?;
-                            let preview = content.lines().take(3).collect::<Vec<_>>().join("\n");
-                            println!("\x1b[33mPreview:\x1b[0m --- load from /tmp/mic.md ---\n{}", preview);
-                            println!("\x1b[32mMachine response:\x1b[0m");
-                            session.add_message(&content, client).await?;
-                            continue;
-                        }
-                        if question == "mic" {
-                            if session.handle_command("mic", client).await? {
-                                // TODO: Save mic content to /tmp/mic.md
-                                continue;
-                            }
-                            continue;
-                        }
-                        if question.is_empty() {
-                            continue;
-                        }
-                        if question.starts_with("/") {
-                            rl.lock().unwrap().add_history_entry(line.as_str());
-                            let command = &question[1..];
-                            if session.handle_command(command, client).await? {
-                                break;
-                            }
-                        } else {
-                            // Store the current input as the last input
-                            last_input = question.to_string();
-                            write_act();
-                            session.add_message(question, client).await?;
-                            write_ai_ack();
-                        }
-                    }
-                    Ok(Err(ReadlineError::Interrupted)) => {
-                        continue;
-                    }
-                    Ok(Err(ReadlineError::Eof)) => {
-                        println!("CTRL-D Quitted");
-                        break;
-                    }
-                    Ok(Err(err)) => {
-                        println!("Error: {:?}", err);
-                        break;
-                    }
-                    Err(join_err) => {
-                        eprintln!("Failed to start background task: {}", join_err);
-                        break;
-                    }
-                }
-            },
+            }) => Some(result),
+            
             Some(file_content) = rx.recv() => {
-                // Cancel any active readline task to prevent the multiple Enter key issue
-                if let Some(task) = readline_task.take() {
-                    task.abort();
-                }
-                
                 println!("\x1b[32mResponse from machine (based on /tmp/mic.md):\x1b[0m");
                 write_ai_ack();
                 session.add_message(&file_content, client).await?;
-                
-                // Don't immediately start a new readline task
-                // It will be started at the beginning of the next loop iteration
+                None
+            }
+        };
+        
+        // Process readline result if we got one
+        if let Some(result) = readline_result {
+            match result {
+                Ok(Ok(line)) => {
+                    let question = line.trim();
+                    // dot command 
+                    if question == "." {
+                        // Repeat the last input
+                        if last_input.is_empty() {
+                            println!("No previous input to repeat.");
+                            continue;
+                        }
+                        println!("\x1b[92m\r \x1b[0m: {}", last_input);
+                        write_act();
+                        session.add_message(&last_input, client).await?;
+                        continue;
+                    }
+                    if question == "q" {
+                        // Set exit flag to true
+                        should_exit = true;
+                        continue;
+                    }
+                    if question == "cls" {
+                        if session.handle_command("cls", client).await? {
+                            continue;
+                        }
+                        continue;
+                    }
+                    if question == "jc" {
+                        // check if /tmp/mic.md exists
+                        if !PathBuf::from("/tmp/mic.md").exists() {
+                            println!("Skip: mic.md does not founded");
+                            continue;
+                        }
+                        // Open the file with exclusive lock
+                        let file = OpenOptions::new().read(true).write(true).open("/tmp/mic.md")?;
+                        file.lock_exclusive()?;
+                        let content = std::fs::read_to_string("/tmp/mic.md")?;
+                        file.unlock()?;
+                        let preview = content.lines().take(3).collect::<Vec<_>>().join("\n");
+                        println!("\x1b[33mPreview:\x1b[0m --- load from /tmp/mic.md ---\n{}", preview);
+                        println!("\x1b[32mMachine response:\x1b[0m");
+                        session.add_message(&content, client).await?;
+                        continue;
+                    }
+                    if question == "mic" {
+                        if session.handle_command("mic", client).await? {
+                            // TODO: Save mic content to /tmp/mic.md
+                            continue;
+                        }
+                        continue;
+                    }
+                    if question.is_empty() {
+                        continue;
+                    }
+                    if question.starts_with("/") {
+                        rl.lock().unwrap().add_history_entry(line.as_str());
+                        let command = &question[1..];
+                        if session.handle_command(command, client).await? {
+                            should_exit = true;
+                            continue;
+                        }
+                    } else {
+                        // Store the current input as the last input
+                        last_input = question.to_string();
+                        write_act();
+                        session.add_message(question, client).await?;
+                        write_ai_ack();
+                    }
+                }
+                Ok(Err(ReadlineError::Interrupted)) => {
+                    continue;
+                }
+                Ok(Err(ReadlineError::Eof)) => {
+                    println!("CTRL-D Quitted");
+                    should_exit = true;
+                }
+                Ok(Err(err)) => {
+                    println!("Error: {:?}", err);
+                    should_exit = true;
+                }
+                Err(join_err) => {
+                    eprintln!("Failed to start background task: {}", join_err);
+                    should_exit = true;
+                }
             }
         }
     }
+    
+    // Abort the file monitoring task before exiting
+    file_monitor_handle.abort();
+    
     // Clean up and exit
     println!("Exiting interactive mode.");
     Ok(())
