@@ -16,6 +16,8 @@ use std::fs;
 use fs2::FileExt; // For file locking
 use std::fs::OpenOptions;
 //use std::fs::File;
+use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::sync::oneshot;
 
 pub fn write_act() {
     let act_file_path = PathBuf::from("/tmp/act");
@@ -103,7 +105,7 @@ pub async fn interactive_mode(
                 write_act();
                 // Indicate file input
                 println!(
-                    "\x1b[35m /tmp/mic.md\x1b[0m\n{}",
+                    "\x1b[35m 󰑉 \x1b[0m\x1b /tmp/mic.md\n{}",
                     content.lines().take(3).collect::<Vec<_>>().join("\n")
                 ); // Indicate file input
                 if let Err(e) = tx.send(content).await {
@@ -114,7 +116,6 @@ pub async fn interactive_mode(
     });
     // Variable to store the last user input
     let mut last_input = String::new();
-    
     // Flag to track if we should exit
     let mut should_exit = false;
     
@@ -147,7 +148,7 @@ pub async fn interactive_mode(
                             println!("No previous input to repeat.");
                             continue;
                         }
-                        println!("\x1b[92m\r \x1b[0m: {}", last_input);
+                        println!("\x1b[92m\r󰭻 \x1b[0m: {}", last_input);
                         write_act();
                         session.add_message(&last_input, client).await?;
                         continue;
