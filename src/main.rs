@@ -13,7 +13,7 @@ mod interactive;
 mod completion;
 mod mic;
 
-use genai::resolver::Error;
+//use genai::resolver::Error;
 use config::{load_config, save_config, Config};
 use cli::{Cli, Commands, DEFAULT_MODEL, list_models, execute_query};
 use interactive::interactive_mode;

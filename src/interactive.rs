@@ -4,7 +4,6 @@ use crate::completion::CommandCompleter;
 use genai::Client;
 use rustyline::Editor;
 use rustyline::error::ReadlineError;
-use std::io::{self, Write};
 use crate::config::get_config_dir;
 use tokio::sync::mpsc; 
 use tokio::task;
@@ -15,9 +14,6 @@ use std::sync::{Arc, Mutex};
 use std::fs;
 use fs2::FileExt; // For file locking
 use std::fs::OpenOptions;
-//use std::fs::File;
-use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::sync::oneshot;
 
 pub fn write_act() {
     let act_file_path = PathBuf::from("/tmp/act");
@@ -124,7 +120,7 @@ pub async fn interactive_mode(
     // Flag to track if we should exit
     let mut should_exit = false;
     // Extract prompt outside the loop
-    let prompt = user_prompt.to_string();
+    //let prompt = user_prompt.to_string();
 
     while !should_exit {
         let prompt = session.get_user_prompt().to_string();
@@ -237,6 +233,9 @@ pub async fn interactive_mode(
     file_monitor_handle.abort();
     
     // Clean up and exit
-    println!("Exiting interactive mode.");
+    //println!("Exiting interactive mode.");
+    // TODO: why need this? Force the program to exit
+    std::process::exit(0);
+    #[allow(unreachable_code)]
     Ok(())
 }
