@@ -285,6 +285,7 @@ impl ChatSession {
                 println!("/cls              - Clear the screen");
                 println!("/clear            - Clear conversation history");
                 println!("/mic              - Record audio use the transcription as a query");
+                println!("/title            - ai generate title");
                 println!("/save <filename>  - Save the current session to a file");
                 println!("/load <filename>  - Load a session from a file");
                 println!("/word <new_word>  - Add word to vocabulary");
