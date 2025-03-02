@@ -35,6 +35,40 @@ pub fn write_ai_ack() {
     }
 }
 
+fn powerline_section_title(
+    model: &str,
+    stream: bool,
+    custom_message: Option<&str>,
+    custom_color: Option<&str>,
+) {
+    // Default message if no custom message is provided
+    let message = custom_message.unwrap_or(" (type 'q' to quit, '/help' for help)");
+
+    // Default color if no custom color is provided
+    let color = custom_color.unwrap_or("\x1b[33m"); // Yellow as default
+
+    println!(
+        "\x1b[43m\x1b[30m Interactive Mode \x1b[0m{}{}\x1b[30m {}\x1b[0m{}{}\x1b[0m{}",
+        color, // Custom or default color
+        "\x1b[44m", // Transition arrow
+        model,
+        if stream {
+            // White background (47m) with black text (30m) for the stream segment
+            format!("\x1b[34m\x1b[47m\x1b[30m (stream)\x1b[0m")
+        } else {
+            String::new()
+        },
+        if stream {
+            // White arrow (37m) transitioning to default background (49m)
+            "\x1b[37m\x1b[49m"
+        } else {
+            // Default arrow (34m, blue) transitioning to default background (49m)
+            "\x1b[34m\x1b[49m"
+        },
+        message // Custom or default message
+    );
+}
+
 pub async fn interactive_mode(
     client: &Client,
     model: &str,
@@ -42,9 +76,8 @@ pub async fn interactive_mode(
     user_prompt: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
 
-    println!("\x1b[43m\x1b[30m Interactive Mode \x1b[0m\x1b[33m\x1b[0m (type 'q' to quit, '/help' for help)");
-    println!("Using model: \x1b[33m{}\x1b[0m {}", model, if stream { "(stream)" } else { "" });
- 
+    powerline_section_title(model, stream, None, None);
+
     //println!("{}", user_prompt);
     crate::config::load_wordlist();
 
