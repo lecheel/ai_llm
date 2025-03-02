@@ -123,6 +123,7 @@ User: Hello again
 Assistant: Well, hello again! Ready for more laughs or something else? 😉
 User: q
 ```
+![Screenshot](asserts/ref1.png)
 
 ### Listing Available Models
 To see a list of available models for different providers, use the `list-models` subcommand:
