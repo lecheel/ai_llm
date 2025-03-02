@@ -100,6 +100,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("Default model set to {}", model);
         }
         Some(Commands::Zero { question, stream }) => {
+            let default_temp_dir = env::temp_dir(); 
+            let temp_dir = config.temp_dir.as_ref().map(|s| s.as_str()).unwrap_or_else(|| {
+                default_temp_dir.to_str().unwrap_or("./")
+            });
             let stream = stream.or(cli.stream).unwrap_or(false);
             match question {
                 Some(q) => {
@@ -108,11 +112,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     execute_query(&client, zero_model, &q, stream).await?;
                 }
                 None => {
-                    interactive_mode(&client, zero_model, stream, &user_prompt).await?;
+                    interactive_mode(&client, zero_model, stream, &user_prompt, temp_dir).await?;
                 }
             }
         }
         Some(Commands::One { question, stream }) => {
+            let default_temp_dir = env::temp_dir(); 
+            let temp_dir = config.temp_dir.as_ref().map(|s| s.as_str()).unwrap_or_else(|| {
+                default_temp_dir.to_str().unwrap_or("./") 
+            });
             let stream = stream.or(cli.stream).unwrap_or(false);
             match question {
                 Some(q) => {
@@ -121,11 +129,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     execute_query(&client, one_model, &q, stream).await?;
                 }
                 None => {
-                    interactive_mode(&client, one_model, stream, &user_prompt).await?;
+                    interactive_mode(&client, one_model, stream, &user_prompt, temp_dir).await?;
                 }
             }
         }
         Some(Commands::Two { question, stream }) => {
+            let default_temp_dir = env::temp_dir(); 
+            let temp_dir = config.temp_dir.as_ref().map(|s| s.as_str()).unwrap_or_else(|| {
+                default_temp_dir.to_str().unwrap_or("./") 
+            });
             let stream = stream.or(cli.stream).unwrap_or(true);
             match question {
                 Some(q) => {
@@ -134,7 +146,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     execute_query(&client, two_model, &q, stream).await?;
                 }
                 None => {
-                    interactive_mode(&client, two_model, stream, &user_prompt).await?;
+                    interactive_mode(&client, two_model, stream, &user_prompt, temp_dir).await?;
                 }
             }
         }
@@ -143,7 +155,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             tools::build_release::handle_build_release(&client, &model, stream, question).await?;
         }
         Some(Commands::Interactive) | None => {
-            interactive_mode(&client, &model, stream, &user_prompt).await?;
+            let default_temp_dir = env::temp_dir(); 
+            let temp_dir = config.temp_dir.as_ref().map(|s| s.as_str()).unwrap_or_else(|| {
+                default_temp_dir.to_str().unwrap_or("./") 
+            });
+            interactive_mode(&client, &model, stream, &user_prompt, temp_dir).await?;            
         }
         Some(Commands::Quit) => {}
     }

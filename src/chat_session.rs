@@ -14,6 +14,7 @@ use crate::mic::mic_main;
 use crate::completion::extract_model_name;
 use crate::completion::{WORDLIST};
 use std::sync::MutexGuard;
+//use crate::config::get_temp_file_path;
 
 #[derive(Serialize, Deserialize)]
 pub struct SessionState {
@@ -94,6 +95,7 @@ impl ChatSession {
             response_text
         };
         self.messages.push(ChatMessage::assistant(&assistant_response));
+        //let ans_file_path = get_temp_file_path(temp_dir, "ans.md");
         let mut file = File::create("/tmp/ans.md")?;
         writeln!(file, "{}", assistant_response)?;
         io::stdout().flush()?;

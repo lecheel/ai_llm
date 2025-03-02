@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use directories::ProjectDirs;
 use toml;
 use std::fs;
+use std::env;
 use std::io::Write;
 use crate::completion::WORDLIST;
 
@@ -16,6 +17,7 @@ pub struct Config {
     pub zero_alias: Option<String>, // Custom alias for "zero"
     pub one_alias: Option<String>,  // Custom alias for "one"
     pub two_alias: Option<String>,  // Custom alias for "two"
+    pub temp_dir: Option<String>
 }
 
 pub fn get_config_file_path() -> PathBuf {
@@ -34,6 +36,10 @@ pub fn get_config_dir() -> PathBuf {
     }
 }
 
+pub fn get_temp_file_path(temp_dir: &str, filename: &str) -> PathBuf {
+    PathBuf::from(temp_dir).join(filename)
+}
+
 pub fn get_sessions_dir() -> PathBuf {
     if let Some(proj_dirs) = ProjectDirs::from("com","leware","ai_llm") {
         let sessions_dir = proj_dirs.config_dir().join("sessions");
@@ -47,7 +53,18 @@ pub fn get_sessions_dir() -> PathBuf {
 pub fn load_config() -> Result<Config, Box<dyn std::error::Error>> {
     let config_path = get_config_file_path();
     if let Ok(config_str) = std::fs::read_to_string(&config_path) {
-        let config = toml::from_str(&config_str)?;
+        let mut config: Config = toml::from_str(&config_str)?;
+        // Set default temp_dir if not specified in the config
+        //
+        let default_temp_dir = env::temp_dir(); // Get OS-default temp dir
+        if config.temp_dir.is_none() {
+            config.temp_dir = Some(
+                default_temp_dir
+                    .to_str()
+                    .unwrap_or("./")
+                    .to_string(),
+            );
+        }
         Ok(config)
     } else {
         Ok(Config::default()) 

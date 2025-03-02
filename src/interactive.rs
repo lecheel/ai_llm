@@ -14,24 +14,22 @@ use std::sync::{Arc, Mutex};
 use std::fs;
 use fs2::FileExt; // For file locking
 use std::fs::OpenOptions;
+use crate::config::get_temp_file_path;
 
-pub fn write_act() {
-    let act_file_path = PathBuf::from("/tmp/act");
-    if let Err(e) = fs::write(&act_file_path, "busy") {
-        eprintln!("Failed to write to /tmp/act: {}", e);
+pub fn write_act(act_file_path: &PathBuf) {
+    if let Err(e) = fs::write(act_file_path, "busy") {
+        eprintln!("Failed to write to {}: {}", act_file_path.display(), e);
     }
 }
 
-pub fn write_ai_ack() {
-    let act_file_path = PathBuf::from("/tmp/act");
+pub fn write_ai_ack(act_file_path: &PathBuf, ai_ack_file_path: &PathBuf) {
     if act_file_path.exists() {
-        if let Err(e) = fs::remove_file(&act_file_path) {
-            eprintln!("Failed to remove /tmp/act: {}", e);
+        if let Err(e) = fs::remove_file(act_file_path) {
+            eprintln!("Failed to remove {}: {}", act_file_path.display(), e);
         }
     }
-    let ai_ack_file_path = PathBuf::from("/tmp/ai_ack");
-    if let Err(e) = fs::write(&ai_ack_file_path, "OK") {
-        eprintln!("Failed to write to /tmp/ai_ack: {}", e);
+    if let Err(e) = fs::write(ai_ack_file_path, "OK") {
+        eprintln!("Failed to write to {}: {}", ai_ack_file_path.display(), e);
     }
 }
 
@@ -74,18 +72,21 @@ pub async fn interactive_mode(
     model: &str,
     stream: bool,
     user_prompt: &str,
+    temp_dir: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let act_file_path = get_temp_file_path(temp_dir, "act");
+    let ai_ack_file_path = get_temp_file_path(temp_dir, "ai_ack");
+    let mic_file_path = get_temp_file_path(temp_dir, "mic.md");
+    //let _ans_file_path = get_temp_file_path(temp_dir, "ans.md");
 
     powerline_section_title(model, stream, None, None);
 
     //println!("{}", user_prompt);
     crate::config::load_wordlist();
 
-    // Step 1: Remove /tmp/mic.md at the beginning
-    let mic_file_path = PathBuf::from("/tmp/mic.md");
     if mic_file_path.exists() {
         if let Err(e) = fs::remove_file(&mic_file_path) {
-            eprintln!("Failed to remove /tmp/mic.md: {}", e);
+            eprintln!("Failed to remove mic.md: {}", e);
         }
     }
     // Initialize ChatSession and other components
@@ -105,8 +106,10 @@ pub async fn interactive_mode(
     }
     // Create an asynchronous channel to receive file input
     let (tx, mut rx) = mpsc::channel::<String>(32); // Channel with buffer capacity 32
-    // Spawn a background task to monitor /tmp/mic.md
     let mic_file_path_clone = mic_file_path.clone();
+    let act_file_path_clone = act_file_path.clone();
+    let ai_ack_file_path_clone = ai_ack_file_path.clone();
+
     let file_monitor_handle = task::spawn(async move {
         let mut last_content = String::new(); // Store last read content
         loop {
@@ -118,28 +121,28 @@ pub async fn interactive_mode(
             };
             // Lock the file exclusively
             if let Err(_) = file.lock_exclusive() {
-                eprintln!("Failed to acquire lock on /tmp/mic.md");
+                eprintln!("Failed to acquire lock on mic.md");
                 continue;
             }
             // Read the file content
             let content = match std::fs::read_to_string(&mic_file_path_clone) {
                 Ok(content) => content,
                 Err(_) => {
-                    file.unlock().unwrap_or_else(|_| eprintln!("Failed to unlock /tmp/mic.md"));
+                    file.unlock().unwrap_or_else(|_| eprintln!("Failed to unlock mic.md"));
                     continue;
                 }
             };
             // Unlock the file
             if let Err(_) = file.unlock() {
-                eprintln!("Failed to unlock /tmp/mic.md");
+                eprintln!("Failed to unlock mic.md");
             }
             // Process the content if it has changed
             if content != last_content && !content.trim().is_empty() {
                 last_content = content.clone(); // Update last content
-                write_act();
+                write_act(&act_file_path);
                 // Indicate file input
                 println!(
-                    "\x1b[35m 󰑉 \x1b[0m\x1b /tmp/mic.md\n{}",
+                    "\x1b[35m 󰑉 \x1b[0m\x1b mic.md\n{}",
                     content.lines().take(3).collect::<Vec<_>>().join("\n")
                 ); // Indicate file input
                 if let Err(e) = tx.send(content).await {
@@ -166,8 +169,8 @@ pub async fn interactive_mode(
             }) => Some(result),
             
             Some(file_content) = rx.recv() => {
-                println!("\x1b[32mResponse from machine (based on /tmp/mic.md):\x1b[0m");
-                write_ai_ack();
+                println!("\x1b[32mResponse from machine (based on mic.md):\x1b[0m");
+                write_ai_ack(&act_file_path_clone, &ai_ack_file_path_clone);
                 session.add_message(&file_content, client).await?;
                 None
             }
@@ -186,7 +189,7 @@ pub async fn interactive_mode(
                             continue;
                         }
                         println!("\x1b[92m\r󰭻 \x1b[0m: {}", last_input);
-                        write_act();
+                        write_act(&act_file_path_clone);
                         session.add_message(&last_input, client).await?;
                         continue;
                     }
@@ -202,25 +205,24 @@ pub async fn interactive_mode(
                         continue;
                     }
                     if question == "jc" {
-                        // check if /tmp/mic.md exists
-                        if !PathBuf::from("/tmp/mic.md").exists() {
+                        // check if mic.md exists
+                        if !PathBuf::from(&mic_file_path).exists() {
                             println!("Skip: mic.md does not founded");
                             continue;
                         }
                         // Open the file with exclusive lock
-                        let file = OpenOptions::new().read(true).write(true).open("/tmp/mic.md")?;
+                        let file = OpenOptions::new().read(true).write(true).open(&mic_file_path)?;
                         file.lock_exclusive()?;
-                        let content = std::fs::read_to_string("/tmp/mic.md")?;
+                        let content = std::fs::read_to_string(&mic_file_path)?;
                         file.unlock()?;
                         let preview = content.lines().take(3).collect::<Vec<_>>().join("\n");
-                        println!("\x1b[33mPreview:\x1b[0m --- load from /tmp/mic.md ---\n{}", preview);
+                        println!("\x1b[33mPreview:\x1b[0m --- load from {} ---\n{}", mic_file_path.to_string_lossy(), preview);
                         println!("\x1b[32mMachine response:\x1b[0m");
                         session.add_message(&content, client).await?;
                         continue;
                     }
                     if question == "mic" {
                         if session.handle_command("mic", client).await? {
-                            // TODO: Save mic content to /tmp/mic.md
                             continue;
                         }
                         continue;
@@ -238,9 +240,9 @@ pub async fn interactive_mode(
                     } else {
                         // Store the current input as the last input
                         last_input = question.to_string();
-                        write_act();
+                        write_act(&act_file_path_clone);
                         session.add_message(question, client).await?;
-                        write_ai_ack();
+                        write_ai_ack(&act_file_path_clone, &ai_ack_file_path_clone);
                     }
                 }
                 Ok(Err(ReadlineError::Interrupted)) => {
