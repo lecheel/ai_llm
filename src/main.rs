@@ -32,6 +32,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = load_config()?;
     let cli = Cli::parse();
 
+    // Resolve default model and stream settings
     let model = cli
         .model
         .as_ref()
@@ -41,15 +42,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let stream: bool = cli.stream.or(config.stream).unwrap_or(false);
     let user_prompt: String = env::var("USER_PROMPT").unwrap_or("\x1b[93m>\x1b[0m".to_string());
 
-    // TODO Custom resolver to add support for unsupported models (e.g., qwen-max)
+    // Resolve custom aliases for Zero, One, Two commands
+    let default_zero = "grok-2".to_string();
+    let default_one = "gemini-2.0-flash".to_string();
+    let default_two = "phi4-mini:latest".to_string();
+
+    let zero_model = config.zero_alias.as_ref().unwrap_or(&default_zero);
+    let one_model = config.one_alias.as_ref().unwrap_or(&default_one);
+    let two_model = config.two_alias.as_ref().unwrap_or(&default_two);
+
+    // Custom resolver for unsupported models
     let target_resolver = ServiceTargetResolver::from_resolver_fn(
         |service_target: ServiceTarget| -> Result<ServiceTarget, genai::resolver::Error> {
-            // Check the model name without destructuring
             if service_target.model.model_name.to_string() == "qwen-max" {
                 let endpoint = Endpoint::from_static("https://dashscope.aliyuncs.com/compatible-mode/v1/");
-                // Instead of trying to print the endpoint directly
                 let auth = AuthData::from_env("QWEN_API_KEY");
-                //let model = ModelIden::new(AdapterKind::OpenAI, "qwen-max");
                 let model = ModelIden::new(AdapterKind::OpenAI, "deepseek-r1-distill-qwen-32b");
                 Ok(ServiceTarget { endpoint, auth, model })
             } else {
@@ -57,14 +64,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         },
     );
+
     // Build client with the custom resolver
     let client = Client::builder()
         .with_service_target_resolver(target_resolver)
         .build();
 
     // Print the banner unless the `query` or `build-release` subcommands are used
-    if !matches!(cli.command, Some(Commands::Query { .. })) 
-    && !matches!(cli.command, Some(Commands::BuildRelease { .. })) {
+    if !matches!(cli.command, Some(Commands::Query { .. }))
+        && !matches!(cli.command, Some(Commands::BuildRelease { .. }))
+    {
         println!("{}", BANNER);
     }
 
@@ -78,30 +87,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let model = model.or(cli.model).unwrap_or_else(|| DEFAULT_MODEL.to_string());
             let stream = stream.or(cli.stream).unwrap_or(false);
             println!("Using model: \x1b[93m{}\x1b[0m", model);
-            println!("stream: \x1b[93m{}\x1b[0m", stream);
+            println!("Stream: \x1b[93m{}\x1b[0m", stream);
             execute_query(&client, &model, &question, stream).await?;
         }
         Some(Commands::SetDefault { model }) => {
             let new_config = Config {
                 default_model: Some(model.clone()),
                 stream: cli.stream,
+                ..config // Copy all other fields from the existing `config`
             };
             save_config(&new_config)?;
             println!("Default model set to {}", model);
         }
-
         Some(Commands::Zero { question, stream }) => {
             let stream = stream.or(cli.stream).unwrap_or(false);
             match question {
                 Some(q) => {
-                    println!("Using model: \x1b[93mgrok-2\x1b[0m");
-                    println!("stream: \x1b[93m{}\x1b[0m", stream);
-                    execute_query(&client, "grok-2", &q, stream).await?;
+                    println!("Using model: \x1b[93m{}\x1b[0m", zero_model);
+                    println!("Stream: \x1b[93m{}\x1b[0m", stream);
+                    execute_query(&client, zero_model, &q, stream).await?;
                 }
                 None => {
-                    let model = "grok-2".to_string();
-                    // Remove extra println! and rely on interactive_mode
-                    interactive_mode(&client, &model, stream, &user_prompt).await?;
+                    interactive_mode(&client, zero_model, stream, &user_prompt).await?;
                 }
             }
         }
@@ -109,14 +116,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let stream = stream.or(cli.stream).unwrap_or(false);
             match question {
                 Some(q) => {
-                    println!("Using model: \x1b[93mgemini-2.0-flash\x1b[0m");
-                    println!("stream: \x1b[93m{}\x1b[0m", stream);
-                    execute_query(&client, "gemini-2.0-flash", &q, stream).await?;
+                    println!("Using model: \x1b[93m{}\x1b[0m", one_model);
+                    println!("Stream: \x1b[93m{}\x1b[0m", stream);
+                    execute_query(&client, one_model, &q, stream).await?;
                 }
                 None => {
-                    let model = "gemini-2.0-flash".to_string();
-                    // Remove extra println! and rely on interactive_mode
-                    interactive_mode(&client, &model, stream, &user_prompt).await?;
+                    interactive_mode(&client, one_model, stream, &user_prompt).await?;
+                }
+            }
+        }
+        Some(Commands::Two { question, stream }) => {
+            let stream = stream.or(cli.stream).unwrap_or(true);
+            match question {
+                Some(q) => {
+                    println!("Using model: \x1b[93m{}\x1b[0m", two_model);
+                    println!("Stream: \x1b[93m{}\x1b[0m", stream);
+                    execute_query(&client, two_model, &q, stream).await?;
+                }
+                None => {
+                    interactive_mode(&client, two_model, stream, &user_prompt).await?;
                 }
             }
         }
@@ -124,7 +142,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let stream = stream.or(cli.stream).unwrap_or(false);
             tools::build_release::handle_build_release(&client, &model, stream, question).await?;
         }
-        Some(Commands::Interactive) | None => interactive_mode(&client, &model, stream, &user_prompt).await?,
+        Some(Commands::Interactive) | None => {
+            interactive_mode(&client, &model, stream, &user_prompt).await?;
+        }
         Some(Commands::Quit) => {}
     }
 

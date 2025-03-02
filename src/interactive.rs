@@ -48,7 +48,7 @@ fn powerline_section_title(
     let color = custom_color.unwrap_or("\x1b[33m"); // Yellow as default
 
     println!(
-        "\x1b[43m\x1b[30m Interactive Mode \x1b[0m{}{}\x1b[30m {}\x1b[0m{}{}\x1b[0m{}",
+        "\x1b[43m\x1b[30m Interactive Mode \x1b[0m{}{}\x1b[30m {} \x1b[0m{}{}\x1b[0m{}",
         color, // Custom or default color
         "\x1b[44m", // Transition arrow
         model,

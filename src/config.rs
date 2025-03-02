@@ -13,6 +13,9 @@ const WORDLIST_FILE: &str = "wordlist.txt";
 pub struct Config {
     pub default_model: Option<String>,
     pub stream: Option<bool>,
+    pub zero_alias: Option<String>, // Custom alias for "zero"
+    pub one_alias: Option<String>,  // Custom alias for "one"
+    pub two_alias: Option<String>,  // Custom alias for "two"
 }
 
 pub fn get_config_file_path() -> PathBuf {

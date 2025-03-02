@@ -55,6 +55,15 @@ pub enum Commands {
         #[arg(short, long)]
         stream: Option<bool>,
     },
+     /// alias for -m phi4-mini:latest
+    #[clap(alias = "2")]
+    Two {
+        /// The question to ask (optional)
+        #[arg(short, long)]
+        question: Option<String>, // Changed from String to Option<String>
+        #[arg(short, long)]
+        stream: Option<bool>,
+    },
  
     /// Build release with cargo and query grok-2
     #[clap(alias = "build")]
