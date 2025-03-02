@@ -13,10 +13,15 @@ mod interactive;
 mod completion;
 mod mic;
 
-//use genai::resolver::Error;
 use config::{load_config, save_config, Config};
 use cli::{Cli, Commands, DEFAULT_MODEL, list_models, execute_query};
 use interactive::interactive_mode;
+
+use std::process::Command;
+use std::thread;
+use std::time::Duration;
+use std::io::Write;
+use std::io::stdout;
 
 const BANNER: &str = r#"                   _           
       ___ ___   __| | ___ _ __  2o25
@@ -117,7 +122,76 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
         }
+        Some(Commands::BuildRelease { stream, question }) => {
+            let stream = stream.or(cli.stream).unwrap_or(false);
+            println!("Cargo build release");
 
+            // Spinner animation in a separate thread
+            let spinner = vec!["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+            let mut spinner_idx = 0;
+            let building = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
+            let building_clone = building.clone();
+
+            let spinner_thread = thread::spawn(move || {
+                while building_clone.load(std::sync::atomic::Ordering::Relaxed) {
+                    print!("\r{} Building...", spinner[spinner_idx]);
+                    spinner_idx = (spinner_idx + 1) % spinner.len();
+                    stdout().flush().unwrap();
+                    thread::sleep(Duration::from_millis(100));
+                }
+                println!("\rBuild complete!    ");
+            });
+
+            // Run cargo build --release and capture output
+            let build_result = Command::new("cargo")
+                .args(["build", "--release"])
+                .output();
+
+            // Stop spinner
+            building.store(false, std::sync::atomic::Ordering::Relaxed);
+            spinner_thread.join().unwrap();
+
+            match build_result {
+                Ok(output) => {
+                    let stdout_str = String::from_utf8_lossy(&output.stdout).to_string();
+                    let stderr_str = String::from_utf8_lossy(&output.stderr).to_string();
+                    let model = "grok-2".to_string();
+
+                    if output.status.success() && (stdout_str.contains("Finished `release`") || stderr_str.contains("Finished `release`")) {
+                        // Build succeeded
+                        if let Some(q) = question {
+                            // Only query if a question is provided
+                            println!("===>{}", q);
+                            println!("Using model: \x1b[93m{}\x1b[0m", model);
+                            println!("stream: \x1b[93m{}\x1b[0m", stream);
+                            execute_query(&client, &model, &q, stream).await?;
+                        } else {
+                            println!("Build succeeded. Done!");
+                        }
+                    } else {
+                        // Build failed or didn’t finish
+                        let q = question.unwrap_or_else(|| {
+                            format!(
+                                "Build failed or incomplete. Stdout: {}\nStderr: {}",
+                                stdout_str, stderr_str
+                            )
+                        });
+                        println!("===>{}", q);
+                        println!("Using model: \x1b[93m{}\x1b[0m", model);
+                        println!("stream: \x1b[93m{}\x1b[0m", stream);
+                        //execute_query(&client, &model, &q, stream).await?;
+                    }
+                }
+                Err(e) => {
+                    let model = "grok-2".to_string();
+                    let q = question.unwrap_or_else(|| format!("Failed to execute build: {}", e));
+                    println!("===>{}", q);
+                    println!("Using model: \x1b[93m{}\x1b[0m", model);
+                    println!("stream: \x1b[93m{}\x1b[0m", stream);
+                    //execute_query(&client, &model, &q, stream).await?;
+                }
+            }
+        }
         Some(Commands::Interactive) | None => interactive_mode(&client, &model, stream, &user_prompt).await?,
         Some(Commands::Quit) => {}
     }

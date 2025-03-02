@@ -56,6 +56,17 @@ pub enum Commands {
         stream: Option<bool>,
     },
  
+    /// Build release with cargo and query grok-2
+    #[clap(alias = "build")]
+    BuildRelease {
+        /// Stream responses for the query
+        #[arg(short, long)]
+        stream: Option<bool>,
+        /// The question to ask after build (optional)
+        #[arg(short, long)]
+        question: Option<String>,
+    },
+
     #[clap(alias = "set")]
     SetDefault {
         /// The model to set as default
