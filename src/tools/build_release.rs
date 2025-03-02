@@ -45,7 +45,7 @@ pub async fn handle_build_release(
 
     fn filter_output(output: &str) -> String {
         let home_re = Regex::new(r"(/home/[a-zA-Z0-9_.-]+|/Users/[a-zA-Z0-9_.-]+)").unwrap();
-        home_re.replace_all(output, "[**HOME**]").to_string()
+        home_re.replace_all(output, "  ").to_string()
     }
 
     fn log_question(q: &str) -> io::Result<()> {
