@@ -86,6 +86,38 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             save_config(&new_config)?;
             println!("Default model set to {}", model);
         }
+
+        Some(Commands::Zero { question, stream }) => {
+            let stream = stream.or(cli.stream).unwrap_or(false);
+            match question {
+                Some(q) => {
+                    println!("Using model: \x1b[93mgrok-2\x1b[0m");
+                    println!("stream: \x1b[93m{}\x1b[0m", stream);
+                    execute_query(&client, "grok-2", &q, stream).await?;
+                }
+                None => {
+                    let model = "grok-2".to_string();
+                    // Remove extra println! and rely on interactive_mode
+                    interactive_mode(&client, &model, stream, &user_prompt).await?;
+                }
+            }
+        }
+        Some(Commands::One { question, stream }) => {
+            let stream = stream.or(cli.stream).unwrap_or(false);
+            match question {
+                Some(q) => {
+                    println!("Using model: \x1b[93mgemini-2.0-flash\x1b[0m");
+                    println!("stream: \x1b[93m{}\x1b[0m", stream);
+                    execute_query(&client, "gemini-2.0-flash", &q, stream).await?;
+                }
+                None => {
+                    let model = "gemini-2.0-flash".to_string();
+                    // Remove extra println! and rely on interactive_mode
+                    interactive_mode(&client, &model, stream, &user_prompt).await?;
+                }
+            }
+        }
+
         Some(Commands::Interactive) | None => interactive_mode(&client, &model, stream, &user_prompt).await?,
         Some(Commands::Quit) => {}
     }

@@ -37,7 +37,25 @@ pub enum Commands {
         #[arg(short = 'm', long = "model")]
         model: Option<String>,
     },
-    /// Set the default model in the config file [qwen2.5:14b, openthinker:7b, deepseek-coder-v2:16b, gemini-2.0-flash, deepseek-chat]
+    /// alias for -m grok-2
+    #[clap(alias = "0")]
+    Zero {
+        /// The question to ask (optional)
+        #[arg(short, long)]
+        question: Option<String>, // Changed from String to Option<String>
+        #[arg(short, long)]
+        stream: Option<bool>,
+    },
+    /// alias for -m gemini-2.0-flash
+    #[clap(alias = "1")]
+    One {
+        /// The question to ask (optional)
+        #[arg(short, long)]
+        question: Option<String>, // Changed from String to Option<String>
+        #[arg(short, long)]
+        stream: Option<bool>,
+    },
+ 
     #[clap(alias = "set")]
     SetDefault {
         /// The model to set as default
