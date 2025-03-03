@@ -9,6 +9,7 @@ use regex::Regex;
 use bat::{PrettyPrinter, Input};
 
 use genai::Client;
+use crate::cli::execute_query;
 
 pub async fn handle_build_release(
     client: &Client,
@@ -112,13 +113,3 @@ pub async fn handle_build_release(
     Ok(())
 }
 
-async fn execute_query(
-    _client: &Client,
-    model: &str,
-    question: &str,
-    stream: bool,
-) -> Result<(), Box<dyn std::error::Error>> {
-    // Placeholder for query execution logic
-    println!("Executing query with model: {}, question: {}, stream: {}", model, question, stream);
-    Ok(())
-}
