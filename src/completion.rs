@@ -182,24 +182,20 @@ impl Completer for CommandCompleter {
                     let sessions_dir = get_sessions_dir();
                     let mut candidates = Vec::new();
                     if let Ok(entries) = fs::read_dir(sessions_dir) {
-                        for entry in entries {
-                            if let Ok(entry) = entry {
-                                let path = entry.path();
-                                if path.is_file() {
-                                    if let Some(filename) =
-                                        path.file_name().and_then(|s| s.to_str())
-                                    {
-                                        let model_display = match extract_model_name(&path) {
-                                            Ok(model) => format!("{} ({})", filename, model),
-                                            Err(_) => filename.to_string(),
-                                        };
+                        for entry in entries.flatten() {
+                            let path = entry.path();
+                            if path.is_file() {
+                                if let Some(filename) = path.file_name().and_then(|s| s.to_str()) {
+                                    let model_display = match extract_model_name(&path) {
+                                        Ok(model) => format!("{} ({})", filename, model),
+                                        Err(_) => filename.to_string(),
+                                    };
 
-                                        if filename.to_lowercase().starts_with(current_word) {
-                                            candidates.push(Pair {
-                                                display: model_display,
-                                                replacement: filename.to_string(),
-                                            });
-                                        }
+                                    if filename.to_lowercase().starts_with(current_word) {
+                                        candidates.push(Pair {
+                                            display: model_display,
+                                            replacement: filename.to_string(),
+                                        });
                                     }
                                 }
                             }

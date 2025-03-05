@@ -118,7 +118,7 @@ pub async fn interactive_mode(
                 Ok(file) => file,
                 Err(_) => continue,
             };
-            if let Err(_) = file.lock_exclusive() {
+            if file.lock_exclusive().is_err() {
                 eprintln!("Failed to acquire lock on mic.md");
                 continue;
             }
@@ -130,7 +130,7 @@ pub async fn interactive_mode(
                     continue;
                 }
             };
-            if let Err(_) = file.unlock() {
+            if file.unlock().is_err() {
                 eprintln!("Failed to unlock mic.md");
             }
             if content != last_content && !content.trim().is_empty() {
@@ -255,9 +255,9 @@ pub async fn interactive_mode(
                     if question.is_empty() {
                         continue;
                     }
-                    if question.starts_with("/") {
+                    if let Some(stripped) = question.strip_prefix("/") {
                         rl.lock().unwrap().add_history_entry(line.as_str());
-                        let command = &question[1..];
+                        let command = stripped; // Remove the leading slash
                         if session.handle_command(command, client).await? {
                             should_exit = true;
                             continue;
