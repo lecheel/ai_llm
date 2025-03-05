@@ -1,21 +1,20 @@
 // completion.rs
+use crate::config::get_sessions_dir;
+use crate::config::AVAILABLE_MODELS;
 use rustyline::completion::{Completer, Pair};
 use rustyline::highlight::Highlighter;
 use rustyline::hint::Hinter;
 use rustyline::validate::Validator;
-use rustyline::Helper;
 use rustyline::Context;
-use crate::config::get_sessions_dir;
-use std::fs;
-use std::borrow::Cow;
-use crate::config::{AVAILABLE_MODELS};
+use rustyline::Helper;
 use serde_json::Value;
+use std::borrow::Cow;
+use std::fs;
 use std::fs::File;
 use std::io::Read;
 //use std::path::Path;
-use std::sync::{Arc, Mutex};
 use lazy_static::lazy_static;
-
+use std::sync::{Arc, Mutex};
 
 lazy_static! {
     pub static ref WORDLIST: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(vec![
@@ -38,7 +37,7 @@ pub struct CommandCompleter;
 
 impl Completer for CommandCompleter {
     type Candidate = Pair;
-    
+
     fn complete(
         &self,
         line: &str,
@@ -46,14 +45,14 @@ impl Completer for CommandCompleter {
         _ctx: &Context<'_>,
     ) -> rustyline::Result<(usize, Vec<Self::Candidate>)> {
         let line_to_cursor = &line[..pos].to_lowercase();
-        
+
         // If no space yet, we're completing the first word
         if !line_to_cursor.contains(' ') {
             if line_to_cursor.starts_with('/') {
                 // Complete command names
                 let commands = vec![
-                    "/help", "/clear", "/quit", "/system", "/mic", "/cls",
-                    "/save", "/load", "/title", "/status", "/model", "/word",
+                    "/help", "/clear", "/quit", "/system", "/mic", "/cls", "/save", "/load",
+                    "/title", "/status", "/model", "/word",
                 ];
                 let mut candidates = Vec::new();
                 for command in &commands {
@@ -80,16 +79,16 @@ impl Completer for CommandCompleter {
                 return Ok((0, candidates));
             }
         }
-        
+
         // We're completing words after the first word
         // Split the line by spaces to get all words
         let words: Vec<&str> = line_to_cursor.split_whitespace().collect();
         let command = words[0]; // First word is the command
-        
+
         // Find the word we're currently completing
         let current_word_start = line_to_cursor.rfind(' ').map(|p| p + 1).unwrap_or(0);
         let current_word = &line_to_cursor[current_word_start..].trim();
-        
+
         // Handle command-specific completions
         match command {
             "/system" => {
@@ -112,11 +111,15 @@ impl Completer for CommandCompleter {
                         }
                     }
                     return Ok((current_word_start, candidates));
-                } 
+                }
                 // Additional arguments for /system (example: profile options)
                 else if words.len() == 3 {
                     let profile_options = vec![
-                        "--verbose", "--quiet", "--default", "--temperature", "--top_p"
+                        "--verbose",
+                        "--quiet",
+                        "--default",
+                        "--temperature",
+                        "--top_p",
                     ];
                     let mut candidates = Vec::new();
                     for option in profile_options {
@@ -143,7 +146,7 @@ impl Completer for CommandCompleter {
                     }
                     return Ok((current_word_start, candidates));
                 }
-            },
+            }
             "/model" => {
                 // Model selection (first argument)
                 if words.len() == 2 {
@@ -172,7 +175,7 @@ impl Completer for CommandCompleter {
                     }
                     return Ok((current_word_start, candidates));
                 }
-            },
+            }
             "/load" => {
                 // Session file selection (first argument)
                 if words.len() == 2 {
@@ -183,12 +186,14 @@ impl Completer for CommandCompleter {
                             if let Ok(entry) = entry {
                                 let path = entry.path();
                                 if path.is_file() {
-                                    if let Some(filename) = path.file_name().and_then(|s| s.to_str()) {
+                                    if let Some(filename) =
+                                        path.file_name().and_then(|s| s.to_str())
+                                    {
                                         let model_display = match extract_model_name(&path) {
                                             Ok(model) => format!("{} ({})", filename, model),
                                             Err(_) => filename.to_string(),
                                         };
-                                        
+
                                         if filename.to_lowercase().starts_with(current_word) {
                                             candidates.push(Pair {
                                                 display: model_display,
@@ -216,7 +221,7 @@ impl Completer for CommandCompleter {
                     }
                     return Ok((current_word_start, candidates));
                 }
-            },
+            }
             "/title" => {
                 // For multi-word titles, offer words from the wordlist
                 let mut candidates = Vec::new();
@@ -230,8 +235,9 @@ impl Completer for CommandCompleter {
                     }
                 }
                 return Ok((current_word_start, candidates));
-            },
-            "/word" => { // add word to wordlist
+            }
+            "/word" => {
+                // add word to wordlist
                 if words.len() == 2 {
                     // Offer completion from existing wordlist, as a suggestion
                     let mut candidates = Vec::new();
@@ -249,7 +255,6 @@ impl Completer for CommandCompleter {
                     //No completion options after the word.
                     return Ok((pos, Vec::new()));
                 }
-
             }
             // Add more command-specific completions for other commands
             _ => {
@@ -267,7 +272,7 @@ impl Completer for CommandCompleter {
                 return Ok((current_word_start, candidates));
             }
         }
-        
+
         // Default case: use the wordlist for any word completion
         let mut candidates = Vec::new();
         let wordlist = WORDLIST.lock().unwrap();
@@ -298,7 +303,10 @@ impl Highlighter for CommandCompleter {
         } else {
             // Regular text highlighting
             let wordlist = WORDLIST.lock().unwrap();
-            if wordlist.iter().any(|word| line.to_lowercase().starts_with(&word.to_lowercase())) {
+            if wordlist
+                .iter()
+                .any(|word| line.to_lowercase().starts_with(&word.to_lowercase()))
+            {
                 Cow::Owned(format!("\x1b[33m{}\x1b[0m", line))
             } else {
                 Cow::Borrowed(line)
@@ -319,7 +327,8 @@ impl Helper for CommandCompleter {}
 pub fn extract_model_name(file_path: &std::path::Path) -> Result<String, String> {
     let mut file = File::open(file_path).map_err(|e| e.to_string())?;
     let mut contents = String::new();
-    file.read_to_string(&mut contents).map_err(|e| e.to_string())?;
+    file.read_to_string(&mut contents)
+        .map_err(|e| e.to_string())?;
     let json: Value = serde_json::from_str(&contents).map_err(|e| e.to_string())?;
     if let Some(model) = json.get("model").and_then(|m| m.as_str()) {
         Ok(model.to_string())
@@ -327,5 +336,3 @@ pub fn extract_model_name(file_path: &std::path::Path) -> Result<String, String>
         Err("Model field not found".to_string())
     }
 }
-
-

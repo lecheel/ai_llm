@@ -1,15 +1,15 @@
 // tools/build_release.rs
+use bat::{Input, PrettyPrinter};
+use regex::Regex;
 use std::io::{self, Write};
 use std::process::Command;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
-use regex::Regex;
-use bat::{PrettyPrinter, Input};
 
-use genai::Client;
 use crate::cli::execute_query;
+use genai::Client;
 
 pub async fn handle_build_release(
     client: &Client,
@@ -36,9 +36,7 @@ pub async fn handle_build_release(
     });
 
     // Run cargo build --release and capture output
-    let build_result = Command::new("cargo")
-        .args(["build", "--release"])
-        .output();
+    let build_result = Command::new("cargo").args(["build", "--release"]).output();
 
     // Stop spinner
     building.store(false, Ordering::Relaxed);
@@ -106,11 +104,13 @@ pub async fn handle_build_release(
 
     match build_result {
         Ok(output) => {
-
             let stdout_str = String::from_utf8_lossy(&output.stdout).to_string();
             let stderr_str = String::from_utf8_lossy(&output.stderr).to_string();
 
-            if output.status.success() && (stdout_str.contains("Finished `release`") || stderr_str.contains("Finished `release`")) {
+            if output.status.success()
+                && (stdout_str.contains("Finished `release`")
+                    || stderr_str.contains("Finished `release`"))
+            {
                 if let Some(q) = question {
                     log_question(&q).unwrap_or_else(|e| eprintln!("Failed to log question: {}", e));
                     bat_printer(&q);
@@ -153,4 +153,3 @@ pub async fn handle_build_release(
 
     Ok(())
 }
-

@@ -1,20 +1,20 @@
 // in src/interactive.rs
 use crate::chat_session::ChatSession;
 use crate::completion::CommandCompleter;
-use genai::Client;
-use rustyline::Editor;
-use rustyline::error::ReadlineError;
 use crate::config::get_config_dir;
-use tokio::sync::mpsc; 
-use tokio::task;
-use tokio::time::{sleep, Duration}; 
-use std::path::PathBuf;
-use tokio::task::spawn_blocking;
-use std::sync::{Arc, Mutex};
-use std::fs;
-use fs2::FileExt; // For file locking
-use std::fs::OpenOptions;
 use crate::config::get_temp_file_path;
+use fs2::FileExt; // For file locking
+use genai::Client;
+use rustyline::error::ReadlineError;
+use rustyline::Editor;
+use std::fs;
+use std::fs::OpenOptions;
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
+use tokio::sync::mpsc;
+use tokio::task;
+use tokio::task::spawn_blocking;
+use tokio::time::{sleep, Duration};
 
 pub fn write_act(act_file_path: &PathBuf) {
     if let Err(e) = fs::write(act_file_path, "busy") {
@@ -47,7 +47,7 @@ fn powerline_section_title(
 
     println!(
         "\x1b[43m\x1b[30m Interactive Mode \x1b[0m{}{}\x1b[30m {} \x1b[0m{}{}\x1b[0m{}",
-        color, // Custom or default color
+        color,       // Custom or default color
         "\x1b[44m", // Transition arrow
         model,
         if stream {
@@ -94,12 +94,10 @@ pub async fn interactive_mode(
         Editor::<CommandCompleter>::new().map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?,
     ));
     rl.lock().unwrap().set_helper(Some(CommandCompleter));
-    rl.lock()
-        .unwrap()
-        .bind_sequence(
-            rustyline::KeyEvent(rustyline::KeyCode::Tab, rustyline::Modifiers::NONE),
-            rustyline::Cmd::Complete,
-        );
+    rl.lock().unwrap().bind_sequence(
+        rustyline::KeyEvent(rustyline::KeyCode::Tab, rustyline::Modifiers::NONE),
+        rustyline::Cmd::Complete,
+    );
     if rl.lock().unwrap().load_history(&history_file).is_err() {
         println!("No previous history found at '{}'", history_file.display());
     }
@@ -113,7 +111,11 @@ pub async fn interactive_mode(
         let mut last_content = String::new();
         loop {
             sleep(Duration::from_secs(2)).await;
-            let file = match OpenOptions::new().read(true).write(true).open(&mic_file_path_clone) {
+            let file = match OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(&mic_file_path_clone)
+            {
                 Ok(file) => file,
                 Err(_) => continue,
             };
@@ -124,7 +126,8 @@ pub async fn interactive_mode(
             let content = match std::fs::read_to_string(&mic_file_path_clone) {
                 Ok(content) => content,
                 Err(_) => {
-                    file.unlock().unwrap_or_else(|_| eprintln!("Failed to unlock mic.md"));
+                    file.unlock()
+                        .unwrap_or_else(|_| eprintln!("Failed to unlock mic.md"));
                     continue;
                 }
             };
@@ -227,7 +230,10 @@ pub async fn interactive_mode(
                             println!("Skip: mic.md does not exist");
                             continue;
                         }
-                        let file = OpenOptions::new().read(true).write(true).open(&mic_file_path)?;
+                        let file = OpenOptions::new()
+                            .read(true)
+                            .write(true)
+                            .open(&mic_file_path)?;
                         file.lock_exclusive()?;
                         let content = std::fs::read_to_string(&mic_file_path)?;
                         file.unlock()?;

@@ -1,23 +1,23 @@
 // main.rs
 use clap::Parser;
 use genai::adapter::AdapterKind;
-use genai::ModelIden;
 use genai::resolver::{AuthData, Endpoint, ServiceTargetResolver};
+use genai::ModelIden;
 use genai::{Client, ServiceTarget};
 use std::env;
 
-mod config;
-mod cli;
 mod chat_session;
-mod interactive;
+mod cli;
 mod completion;
+mod config;
+mod interactive;
 mod mic;
 
-// tools 
+// tools
 mod tools;
 
+use cli::{execute_query, list_models, Cli, Commands, DEFAULT_MODEL};
 use config::{load_config, save_config, Config};
-use cli::{Cli, Commands, DEFAULT_MODEL, list_models, execute_query};
 use interactive::interactive_mode;
 use std::path::Path;
 
@@ -56,10 +56,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let target_resolver = ServiceTargetResolver::from_resolver_fn(
         |service_target: ServiceTarget| -> Result<ServiceTarget, genai::resolver::Error> {
             if service_target.model.model_name.to_string() == "qwen-max" {
-                let endpoint = Endpoint::from_static("https://dashscope.aliyuncs.com/compatible-mode/v1/");
+                let endpoint =
+                    Endpoint::from_static("https://dashscope.aliyuncs.com/compatible-mode/v1/");
                 let auth = AuthData::from_env("QWEN_API_KEY");
                 let model = ModelIden::new(AdapterKind::OpenAI, "deepseek-r1-distill-qwen-32b");
-                Ok(ServiceTarget { endpoint, auth, model })
+                Ok(ServiceTarget {
+                    endpoint,
+                    auth,
+                    model,
+                })
             } else {
                 Ok(service_target)
             }
@@ -85,7 +90,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             stream,
             model,
         }) => {
-            let model = model.or(cli.model).unwrap_or_else(|| DEFAULT_MODEL.to_string());
+            let model = model
+                .or(cli.model)
+                .unwrap_or_else(|| DEFAULT_MODEL.to_string());
             let stream = stream.or(cli.stream).unwrap_or(false);
             println!("Using model: \x1b[93m{}\x1b[0m", model);
             println!("Stream: \x1b[93m{}\x1b[0m", stream);
@@ -101,10 +108,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("Default model set to {}", model);
         }
         Some(Commands::Zero { question, stream }) => {
-            let default_temp_dir = env::temp_dir(); 
-            let temp_dir = config.temp_dir.as_ref().map(|s| s.as_str()).unwrap_or_else(|| {
-                default_temp_dir.to_str().unwrap_or("./")
-            });
+            let default_temp_dir = env::temp_dir();
+            let temp_dir = config
+                .temp_dir
+                .as_ref()
+                .map(|s| s.as_str())
+                .unwrap_or_else(|| default_temp_dir.to_str().unwrap_or("./"));
             let stream = stream.or(cli.stream).unwrap_or(false);
             match question {
                 Some(q) => {
@@ -118,10 +127,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         Some(Commands::One { question, stream }) => {
-            let default_temp_dir = env::temp_dir(); 
-            let temp_dir = config.temp_dir.as_ref().map(|s| s.as_str()).unwrap_or_else(|| {
-                default_temp_dir.to_str().unwrap_or("./") 
-            });
+            let default_temp_dir = env::temp_dir();
+            let temp_dir = config
+                .temp_dir
+                .as_ref()
+                .map(|s| s.as_str())
+                .unwrap_or_else(|| default_temp_dir.to_str().unwrap_or("./"));
             let stream = stream.or(cli.stream).unwrap_or(false);
             match question {
                 Some(q) => {
@@ -135,10 +146,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         Some(Commands::Two { question, stream }) => {
-            let default_temp_dir = env::temp_dir(); 
-            let temp_dir = config.temp_dir.as_ref().map(|s| s.as_str()).unwrap_or_else(|| {
-                default_temp_dir.to_str().unwrap_or("./") 
-            });
+            let default_temp_dir = env::temp_dir();
+            let temp_dir = config
+                .temp_dir
+                .as_ref()
+                .map(|s| s.as_str())
+                .unwrap_or_else(|| default_temp_dir.to_str().unwrap_or("./"));
             let stream = stream.or(cli.stream).unwrap_or(true);
             match question {
                 Some(q) => {
@@ -152,7 +165,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         Some(Commands::BuildRelease { stream, question }) => {
-    
             // check if Cargo.toml is present
             if !Path::new("Cargo.toml").exists() {
                 return Err("Cargo build need Cargo.toml file is present".into());
@@ -162,11 +174,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             tools::build_release::handle_build_release(&client, &model, stream, question).await?;
         }
         Some(Commands::Interactive) | None => {
-            let default_temp_dir = env::temp_dir(); 
-            let temp_dir = config.temp_dir.as_ref().map(|s| s.as_str()).unwrap_or_else(|| {
-                default_temp_dir.to_str().unwrap_or("./") 
-            });
-            interactive_mode(&client, &model, stream, &user_prompt, temp_dir).await?;            
+            let default_temp_dir = env::temp_dir();
+            let temp_dir = config
+                .temp_dir
+                .as_ref()
+                .map(|s| s.as_str())
+                .unwrap_or_else(|| default_temp_dir.to_str().unwrap_or("./"));
+            interactive_mode(&client, &model, stream, &user_prompt, temp_dir).await?;
         }
         Some(Commands::Quit) => {}
     }

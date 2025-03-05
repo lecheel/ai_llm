@@ -1,12 +1,12 @@
 // config.rs
-use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
-use directories::ProjectDirs;
-use toml;
-use std::fs;
-use std::env;
-use std::io::Write;
 use crate::completion::WORDLIST;
+use directories::ProjectDirs;
+use serde::{Deserialize, Serialize};
+use std::env;
+use std::fs;
+use std::io::Write;
+use std::path::PathBuf;
+use toml;
 
 const WORDLIST_FILE: &str = "wordlist.txt";
 
@@ -17,7 +17,7 @@ pub struct Config {
     pub zero_alias: Option<String>, // Custom alias for "zero"
     pub one_alias: Option<String>,  // Custom alias for "one"
     pub two_alias: Option<String>,  // Custom alias for "two"
-    pub temp_dir: Option<String>
+    pub temp_dir: Option<String>,
 }
 
 pub fn get_config_file_path() -> PathBuf {
@@ -25,12 +25,11 @@ pub fn get_config_file_path() -> PathBuf {
 }
 
 pub fn get_config_dir() -> PathBuf {
-    if let Some(proj_dirs) = ProjectDirs::from("com","leware","ai_llm") {
+    if let Some(proj_dirs) = ProjectDirs::from("com", "leware", "ai_llm") {
         let config_dir = proj_dirs.config_dir();
-        //println!("get_config_dir returning: '{}'", config_dir.display()); 
+        //println!("get_config_dir returning: '{}'", config_dir.display());
         std::fs::create_dir_all(config_dir).expect("Failed to create config directory");
         config_dir.to_path_buf()
-
     } else {
         PathBuf::from(".") // Fallback to current directory
     }
@@ -41,7 +40,7 @@ pub fn get_temp_file_path(temp_dir: &str, filename: &str) -> PathBuf {
 }
 
 pub fn get_sessions_dir() -> PathBuf {
-    if let Some(proj_dirs) = ProjectDirs::from("com","leware","ai_llm") {
+    if let Some(proj_dirs) = ProjectDirs::from("com", "leware", "ai_llm") {
         let sessions_dir = proj_dirs.config_dir().join("sessions");
         std::fs::create_dir_all(&sessions_dir).expect("Failed to create sessions directory");
         sessions_dir
@@ -58,20 +57,15 @@ pub fn load_config() -> Result<Config, Box<dyn std::error::Error>> {
         //
         let default_temp_dir = env::temp_dir(); // Get OS-default temp dir
         if config.temp_dir.is_none() {
-            config.temp_dir = Some(
-                default_temp_dir
-                    .to_str()
-                    .unwrap_or("./")
-                    .to_string(),
-            );
+            config.temp_dir = Some(default_temp_dir.to_str().unwrap_or("./").to_string());
         }
         Ok(config)
     } else {
-        Ok(Config::default()) 
+        Ok(Config::default())
     }
 }
 
-pub fn save_config(config: &Config) -> Result<(), Box<dyn std::error::Error>> { 
+pub fn save_config(config: &Config) -> Result<(), Box<dyn std::error::Error>> {
     let config_path = get_config_file_path(); // Use get_config_file_path() internally
     let toml_str = toml::to_string(config)?;
     std::fs::write(&config_path, toml_str)?;
@@ -87,7 +81,7 @@ pub fn load_wordlist() {
                 let _word_count = words.len(); // Calculate length before moving
                 let mut wordlist = WORDLIST.lock().unwrap();
                 *wordlist = words; // Move happens here
-                //println!("Loaded {} words from {:?}", word_count, path); // Use word_count instead
+                                   //println!("Loaded {} words from {:?}", word_count, path); // Use word_count instead
             }
             Err(e) => {
                 eprintln!("Failed to load wordlist from {:?}: {}", path, e);
@@ -100,20 +94,17 @@ pub fn save_wordlist() {
     let data = {
         let wordlist = WORDLIST.lock().unwrap();
         wordlist.join("\n")
-    }; // Lock is released here    
-    //let wordlist = WORDLIST.lock().unwrap();
-    //let data = wordlist.join("\n");
+    }; // Lock is released here
+       //let wordlist = WORDLIST.lock().unwrap();
+       //let data = wordlist.join("\n");
     let path = get_config_dir().join(WORDLIST_FILE); // Use config dir
     match fs::File::create(&path) {
-        Ok(mut file) => {
-            match file.write_all(data.as_bytes()) {
-                Ok(_) => {
-                }
-                Err(e) => {
-                    eprintln!("Error writing to file: {}", e);
-                }
+        Ok(mut file) => match file.write_all(data.as_bytes()) {
+            Ok(_) => {}
+            Err(e) => {
+                eprintln!("Error writing to file: {}", e);
             }
-        }
+        },
         Err(e) => {
             eprintln!("Error creating file: {}", e);
         }
@@ -129,4 +120,3 @@ pub const AVAILABLE_MODELS: &[&str] = &[
     "qwen2.5:14b",
     "qwen-max",
 ];
-

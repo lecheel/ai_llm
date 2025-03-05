@@ -1,18 +1,18 @@
 // chat_session.rs
+use crate::completion::extract_model_name;
+use crate::completion::WORDLIST;
+use crate::config::{get_sessions_dir, save_wordlist, AVAILABLE_MODELS};
+use crate::mic::mic_main;
+use bat::Input;
+use chrono::prelude::*;
+use genai::chat::printer::{print_chat_stream, PrintChatStreamOptions};
 use genai::chat::{ChatMessage, ChatRequest};
 use genai::Client;
-use genai::chat::printer::{print_chat_stream, PrintChatStreamOptions};
-use std::io::{self, Write};
-use std::fs::File;
-use std::fs;
-use bat::Input;
-use std::io::{BufWriter,BufReader};
 use serde::{Deserialize, Serialize};
-use crate::config::{get_sessions_dir,AVAILABLE_MODELS,save_wordlist};
-use chrono::prelude::*;
-use crate::mic::mic_main;
-use crate::completion::extract_model_name;
-use crate::completion::{WORDLIST};
+use std::fs;
+use std::fs::File;
+use std::io::{self, Write};
+use std::io::{BufReader, BufWriter};
 use std::sync::MutexGuard;
 //use crate::config::get_temp_file_path;
 
@@ -72,7 +72,11 @@ impl ChatSession {
         cleaned
     }
 
-    pub async fn add_message(&mut self, content: &str, client: &Client) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn add_message(
+        &mut self,
+        content: &str,
+        client: &Client,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         self.messages.push(ChatMessage::user(content));
         let chat_req = ChatRequest::new(self.messages.clone());
         let assistant_response = if self.stream {
@@ -81,7 +85,10 @@ impl ChatSession {
             print_chat_stream(chat_stream, Some(&options)).await?
         } else {
             let chat_res = client.exec_chat(&self.model, chat_req, None).await?;
-            let response_text = chat_res.content_text_as_str().unwrap_or("NO ANSWER").to_string();
+            let response_text = chat_res
+                .content_text_as_str()
+                .unwrap_or("NO ANSWER")
+                .to_string();
             let display_text = response_text.clone();
             let mut printer = bat::PrettyPrinter::new();
             printer
@@ -94,7 +101,8 @@ impl ChatSession {
             println!();
             response_text
         };
-        self.messages.push(ChatMessage::assistant(&assistant_response));
+        self.messages
+            .push(ChatMessage::assistant(&assistant_response));
         //let ans_file_path = get_temp_file_path(temp_dir, "ans.md");
         let mut file = File::create("/tmp/ans.md")?;
         writeln!(file, "{}", assistant_response)?;
@@ -102,12 +110,16 @@ impl ChatSession {
         Ok(())
     }
 
-    pub async fn handle_command(&mut self, command: &str, client: &Client) -> Result<bool, Box<dyn std::error::Error>> {
+    pub async fn handle_command(
+        &mut self,
+        command: &str,
+        client: &Client,
+    ) -> Result<bool, Box<dyn std::error::Error>> {
         let parts: Vec<&str> = command.splitn(2, ' ').collect();
         match parts[0] {
             "quit" | "bye" | "q" | "Q" => {
                 return Ok(true);
-            },
+            }
 
             "cls" => {
                 print!("\x1b[2J");
@@ -122,7 +134,6 @@ impl ChatSession {
                     println!("System prompt set to: \x1b[33m{}\x1b[0m", system_message);
                     let adv_prompt = format!("\x1b[32m{}>\x1b[0m", system_message);
                     self.user_prompt = adv_prompt;
-
                 } else {
                     println!("Predefined roles:");
                     for (role, description) in ChatSession::PREDEFINED_ROLES {
@@ -146,8 +157,8 @@ impl ChatSession {
                 println!("Model: {}", self.model);
                 if let genai::chat::MessageContent::Text(text) = &self.messages[0].content {
                     println!("System prompt: {}", text);
-                }   
-                // stream 
+                }
+                // stream
                 if self.stream {
                     println!("Stream mode: \x1b[32menabled\x1b[0m");
                 } else {
@@ -164,20 +175,24 @@ impl ChatSession {
                 self.messages.push(ChatMessage::user(summary_prompt));
                 let chat_req = ChatRequest::new(self.messages.clone());
                 let chat_res = client.exec_chat(&self.model, chat_req, None).await?;
-                let response_text = chat_res.content_text_as_str().unwrap_or("NO_TITLE").to_string();
+                let response_text = chat_res
+                    .content_text_as_str()
+                    .unwrap_or("NO_TITLE")
+                    .to_string();
                 let filename = ChatSession::clean_filename(&response_text);
                 self.title = Some(filename.clone());
                 //self.title = Some(response_text.clone()); // Set the title
                 self.messages.pop(); // Remove the temporary "title" request from the history
                 println!("\x1b[32mSession title set to:\x1b[0m {}", filename);
-            }           
+            }
             "clear" => {
                 self.messages = vec![ChatMessage::system(
                     "You are a helpful AI assistant. Answer concisely and clearly.",
                 )];
                 println!("Conversation history cleared.");
             }
-            "word" => { // add word to wordlist
+            "word" => {
+                // add word to wordlist
                 if parts.len() > 1 {
                     let new_word = parts[1].trim().to_string();
                     {
@@ -194,7 +209,7 @@ impl ChatSession {
                 } else {
                     println!("Usage: /word <new_word>");
                 }
-            }            
+            }
             "save" => {
                 if parts.len() > 1 {
                     let filename = ChatSession::clean_filename(parts[1]);
@@ -214,10 +229,10 @@ impl ChatSession {
                         let file = File::create(&filepath)?; // Create file in sessions dir
                         let writer = BufWriter::new(file);
                         serde_json::to_writer_pretty(writer, &state)?;
-                        println!("Session saved to '{}'", filename); 
+                        println!("Session saved to '{}'", filename);
                     }
                 }
-            } 
+            }
             "load" => {
                 if parts.len() > 1 {
                     let filename = parts[1];
@@ -243,7 +258,7 @@ impl ChatSession {
                             // Get the file's metadata
                             let metadata = fs::metadata(&path)?;
                             let modified_time = metadata.modified()?; // Get the last modification time
-                            // Convert the timestamp to a human-readable format
+                                                                      // Convert the timestamp to a human-readable format
                             let datetime: DateTime<Local> = modified_time.into();
                             let formatted_date = datetime.format("%Y-%m-%d %H:%M:%S").to_string();
 
@@ -254,21 +269,23 @@ impl ChatSession {
                             };
 
                             // Print the filename, modification date, and model name
-                            println!("- {} (\x1b[33mLast Modified: {}\x1b[0m) (\x1b[34m{}\x1b[0m)", 
-                                filename, formatted_date, model_name);
+                            println!(
+                                "- {} (\x1b[33mLast Modified: {}\x1b[0m) (\x1b[34m{}\x1b[0m)",
+                                filename, formatted_date, model_name
+                            );
                         }
                     }
                 }
             }
-            "mic"  => {
+            "mic" => {
                 //println!("Starting recording... Please speak now.");
                 match mic_main() {
                     Ok(true) => {
                         println!(" ");
-                    },
+                    }
                     Ok(false) => {
                         println!("Recording canceled.");
-                    },
+                    }
                     Err(e) => {
                         println!("Error: {}", e);
                     }
@@ -321,5 +338,5 @@ impl ChatSession {
         self.title = state.title;
         self.system_prompt = state.system_prompt;
         self.user_prompt = state.user_prompt;
-    }    
+    }
 }

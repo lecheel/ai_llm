@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
-use genai::Client;
 use genai::adapter::AdapterKind;
+use genai::Client;
 
 pub const DEFAULT_MODEL: &str = "gemini-2.0-flash";
 
@@ -33,7 +33,7 @@ pub enum Commands {
         question: String,
         /// Stream responses
         #[arg(short, long)]
-        stream: Option<bool>,        
+        stream: Option<bool>,
         #[arg(short = 'm', long = "model")]
         model: Option<String>,
     },
@@ -55,7 +55,7 @@ pub enum Commands {
         #[arg(short, long)]
         stream: Option<bool>,
     },
-     /// alias for -m phi4-mini:latest
+    /// alias for -m phi4-mini:latest
     #[clap(alias = "2")]
     Two {
         /// The question to ask (optional)
@@ -64,7 +64,7 @@ pub enum Commands {
         #[arg(short, long)]
         stream: Option<bool>,
     },
- 
+
     /// Build release with cargo and query grok-2
     #[clap(alias = "build")]
     BuildRelease {
@@ -112,8 +112,8 @@ pub async fn execute_query(
     question: &str,
     stream: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    use genai::chat::{ChatMessage, ChatRequest};
     use genai::chat::printer::{print_chat_stream, PrintChatStreamOptions};
+    use genai::chat::{ChatMessage, ChatRequest};
 
     let chat_req = ChatRequest::new(vec![
         ChatMessage::system("Answer concisely and clearly"),
@@ -123,7 +123,11 @@ pub async fn execute_query(
     if stream {
         println!(" \x1b[92m󰼭 :\x1b[0m");
         let chat_res = client.exec_chat_stream(model, chat_req, None).await?;
-        print_chat_stream(chat_res, Some(&PrintChatStreamOptions::from_print_events(false))).await?;
+        print_chat_stream(
+            chat_res,
+            Some(&PrintChatStreamOptions::from_print_events(false)),
+        )
+        .await?;
     } else {
         println!(" \x1b[92m󱚠 :\x1b[0m");
         let chat_res = client.exec_chat(model, chat_req, None).await?;
