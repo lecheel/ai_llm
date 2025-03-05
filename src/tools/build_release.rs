@@ -116,6 +116,8 @@ pub async fn handle_build_release(
                     bat_printer(&q);
                     execute_query(client, model, &q, stream).await?;
                 } else {
+                    // remove q.log if it exists
+                    let _ = std::fs::remove_file("q.log");
                     println!("Build succeeded. Done!");
                 }
             } else {
