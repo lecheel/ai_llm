@@ -13,6 +13,9 @@ pub const DEFAULT_MODEL: &str = "gemini-2.0-flash";
     after_help = "Note: llm query -q \"What is Rust?\" --stream"
 )]
 pub struct Cli {
+    /// Enable the banner (default is off)
+    #[arg(long, short = 'b', default_value_t = false)]
+    pub banner: bool,
     #[arg(short, long)]
     pub model: Option<String>,
     #[arg(short, long)]

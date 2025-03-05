@@ -76,8 +76,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_service_target_resolver(target_resolver)
         .build();
 
-    // Print the banner unless the `query` or `build-release` subcommands are used
-    if !matches!(cli.command, Some(Commands::Query { .. }))
+    // Print the banner only if the `banner` flag is enabled
+    if cli.banner
+        && !matches!(cli.command, Some(Commands::Query { .. }))
         && !matches!(cli.command, Some(Commands::BuildRelease { .. }))
     {
         println!("{}", BANNER);

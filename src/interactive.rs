@@ -214,6 +214,12 @@ pub async fn interactive_mode(
                         session.add_message(&last_input, client).await?;
                         continue;
                     }
+                    if question == "?" {
+                        if session.handle_command("?", client).await? {
+                            continue;
+                        }
+                        continue;
+                    }
                     if question == "q" {
                         should_exit = true;
                         continue;
