@@ -110,9 +110,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some(Commands::Zero { question, stream }) => {
             let default_temp_dir = env::temp_dir();
             let temp_dir = config
-                .temp_dir
-                .as_ref()
-                .map(|s| s.as_str())
+                .temp_dir.as_deref()
                 .unwrap_or_else(|| default_temp_dir.to_str().unwrap_or("./"));
             let stream = stream.or(cli.stream).unwrap_or(false);
             match question {
@@ -129,9 +127,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some(Commands::One { question, stream }) => {
             let default_temp_dir = env::temp_dir();
             let temp_dir = config
-                .temp_dir
-                .as_ref()
-                .map(|s| s.as_str())
+                .temp_dir.as_deref()
                 .unwrap_or_else(|| default_temp_dir.to_str().unwrap_or("./"));
             let stream = stream.or(cli.stream).unwrap_or(false);
             match question {
@@ -148,9 +144,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some(Commands::Two { question, stream }) => {
             let default_temp_dir = env::temp_dir();
             let temp_dir = config
-                .temp_dir
-                .as_ref()
-                .map(|s| s.as_str())
+                .temp_dir.as_deref()
                 .unwrap_or_else(|| default_temp_dir.to_str().unwrap_or("./"));
             let stream = stream.or(cli.stream).unwrap_or(true);
             match question {
@@ -176,9 +170,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some(Commands::Interactive) | None => {
             let default_temp_dir = env::temp_dir();
             let temp_dir = config
-                .temp_dir
-                .as_ref()
-                .map(|s| s.as_str())
+                .temp_dir.as_deref()
                 .unwrap_or_else(|| default_temp_dir.to_str().unwrap_or("./"));
             interactive_mode(&client, &model, stream, &user_prompt, temp_dir).await?;
         }

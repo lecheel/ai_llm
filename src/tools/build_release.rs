@@ -20,7 +20,7 @@ pub async fn handle_build_release(
     println!("Cargo build release");
 
     // Spinner animation in a separate thread
-    let spinner = vec!["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+    let spinner = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
     let mut spinner_idx = 0;
     let building = Arc::new(AtomicBool::new(true));
     let building_clone = building.clone();

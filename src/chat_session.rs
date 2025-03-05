@@ -205,7 +205,7 @@ impl ChatSession {
                             return Ok(false);
                         }
                     }
-                    tokio::task::spawn_blocking(|| save_wordlist()).await?;
+                    tokio::task::spawn_blocking(save_wordlist).await?;
                 } else {
                     println!("Usage: /word <new_word>");
                 }

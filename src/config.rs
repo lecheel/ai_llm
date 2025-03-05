@@ -6,7 +6,6 @@ use std::env;
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
-use toml;
 
 const WORDLIST_FILE: &str = "wordlist.txt";
 

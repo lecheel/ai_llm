@@ -126,5 +126,5 @@ pub fn mic_main() -> Result<bool, Box<dyn std::error::Error>> {
             writer.finalize()?;
         }
     }
-    return Ok(true);
+    Ok(true)
 }

@@ -46,13 +46,12 @@ fn powerline_section_title(
     let color = custom_color.unwrap_or("\x1b[33m"); // Yellow as default
 
     println!(
-        "\x1b[43m\x1b[30m Interactive Mode \x1b[0m{}{}\x1b[30m {} \x1b[0m{}{}\x1b[0m{}",
-        color,       // Custom or default color
-        "\x1b[44m", // Transition arrow
+        "\x1b[43m\x1b[30m Interactive Mode \x1b[0m{}\x1b[44m\x1b[30m {} \x1b[0m{}{}\x1b[0m{}",
+        color, // Transition arrow
         model,
         if stream {
             // White background (47m) with black text (30m) for the stream segment
-            format!("\x1b[34m\x1b[47m\x1b[30m (stream)\x1b[0m")
+            "\x1b[34m\x1b[47m\x1b[30m (stream)\x1b[0m".to_string()
         } else {
             String::new()
         },
