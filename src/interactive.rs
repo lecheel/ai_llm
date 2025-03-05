@@ -142,7 +142,7 @@ pub async fn interactive_mode(
                 write_act(&act_file_path);
                 // Indicate file input
                 println!(
-                    "\x1b[35m 󰑉 \x1b[0m\x1b mic.md\n{}",
+                    "\x1b[35m 󰑉 \x1b[0m-- mic.md\n{}",
                     content.lines().take(3).collect::<Vec<_>>().join("\n")
                 ); // Indicate file input
                 if let Err(e) = tx.send(content).await {

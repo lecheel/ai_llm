@@ -19,6 +19,7 @@ mod tools;
 use config::{load_config, save_config, Config};
 use cli::{Cli, Commands, DEFAULT_MODEL, list_models, execute_query};
 use interactive::interactive_mode;
+use std::path::Path;
 
 const BANNER: &str = r#"                   _           
       ___ ___   __| | ___ _ __  2o25
@@ -45,7 +46,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Resolve custom aliases for Zero, One, Two commands
     let default_zero = "grok-2".to_string();
     let default_one = "gemini-2.0-flash".to_string();
-    let default_two = "phi4-mini:latest".to_string();
+    let default_two = "phi4".to_string();
 
     let zero_model = config.zero_alias.as_ref().unwrap_or(&default_zero);
     let one_model = config.one_alias.as_ref().unwrap_or(&default_one);
@@ -151,6 +152,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         Some(Commands::BuildRelease { stream, question }) => {
+    
+            // check if Cargo.toml is present
+            if !Path::new("Cargo.toml").exists() {
+                return Err("Cargo build need Cargo.toml file is present".into());
+            }
+
             let stream = stream.or(cli.stream).unwrap_or(false);
             tools::build_release::handle_build_release(&client, &model, stream, question).await?;
         }

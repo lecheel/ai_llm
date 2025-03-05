@@ -49,6 +49,36 @@ pub async fn handle_build_release(
         home_re.replace_all(output, "  ").to_string()
     }
 
+    fn extract_error_sessions(compiler_output: &str) -> Vec<String> {
+        // Define regex patterns
+        let error_start_pattern = Regex::new(r"^error\[.*\]:").unwrap();
+        let mut sessions = Vec::new();
+        let mut current_session = Vec::new();
+
+        // Split the compiler output into lines
+        for line in compiler_output.lines() {
+            if error_start_pattern.is_match(line) {
+                // If a new error session starts, save the previous session (if any)
+                if !current_session.is_empty() {
+                    sessions.push(current_session.join("\n"));
+                    current_session.clear();
+                }
+            }
+
+            // Add the current line to the ongoing session if it's part of an error
+            if !current_session.is_empty() || error_start_pattern.is_match(line) {
+                current_session.push(line);
+            }
+        }
+
+        // Save the last session if it exists
+        if !current_session.is_empty() {
+            sessions.push(current_session.join("\n"));
+        }
+
+        sessions
+    }
+
     fn log_question(q: &str) -> io::Result<()> {
         let mut file = std::fs::OpenOptions::new()
             .create(true)
@@ -76,6 +106,7 @@ pub async fn handle_build_release(
 
     match build_result {
         Ok(output) => {
+
             let stdout_str = String::from_utf8_lossy(&output.stdout).to_string();
             let stderr_str = String::from_utf8_lossy(&output.stderr).to_string();
 
@@ -90,12 +121,20 @@ pub async fn handle_build_release(
             } else {
                 let filtered_stdout = filter_output(&stdout_str);
                 let filtered_stderr = filter_output(&stderr_str);
+
+                let error_sessions = extract_error_sessions(&filtered_stderr);
+                let error_message = if error_sessions.is_empty() {
+                    "No specific error sessions found.".to_string()
+                } else {
+                    error_sessions.join("\n\n---\n\n") // Join multiple error sessions with a separator
+                };
                 let q = question.unwrap_or_else(|| {
                     format!(
-                        "Build failed or incomplete. Stdout: {}\nStderr: {}",
-                        filtered_stdout, filtered_stderr
+                        "Build failed or incomplete.\n\nError Sessions:\n{}\n\nStdout: {}\nStderr: {}",
+                        error_message, filtered_stdout, filtered_stderr
                     )
                 });
+
                 println!("Using model: \x1b[93m{}\x1b[0m", model);
                 bat_printer(&q);
                 log_question(&q).unwrap_or_else(|e| eprintln!("Failed to log question: {}", e));
