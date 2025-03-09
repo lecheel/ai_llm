@@ -60,14 +60,14 @@ This will display the help message, showing available options and subcommands.
 ### Setting the Model
 You can specify the model to use with the `--model` option:
 ```bash
-ai_llm --model gemini-pro "What is the capital of France?"
+ai_llm --model gemini-pro query -q "What is the capital of France?"
 ```
 If you don't specify a model, it will use the default model: `gemini-2.0-flash`. You can change the default model using the `set-default` subcommand.
 
 ### Streaming Responses
 To enable streaming responses, use the `--stream` flag:
 ```bash
-ai_llm --stream --model gemini-pro "Explain quantum physics."
+ai_llm --stream --model gemini-pro query -q "Explain quantum physics."
 ```
 
 ### Single Query Mode

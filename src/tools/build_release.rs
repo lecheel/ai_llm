@@ -10,6 +10,8 @@ use std::time::Duration;
 
 use crate::cli::execute_query;
 use genai::Client;
+use std::io::stdout;
+use std::io::stdin;
 
 pub async fn handle_build_release(
     client: &Client,
@@ -81,7 +83,7 @@ pub async fn handle_build_release(
         let mut file = std::fs::OpenOptions::new()
             .create(true)
             .append(true)
-            .open("q.log")?;
+            .open("/tmp/q.log")?;
         writeln!(file, "{}", q)?;
         file.flush()?;
         Ok(())
@@ -114,10 +116,10 @@ pub async fn handle_build_release(
                 if let Some(q) = question {
                     log_question(&q).unwrap_or_else(|e| eprintln!("Failed to log question: {}", e));
                     bat_printer(&q);
-                    execute_query(client, model, &q, stream).await?;
+                    //execute_query(client, model, &q, stream, true).await?;
                 } else {
                     // remove q.log if it exists
-                    let _ = std::fs::remove_file("q.log");
+                    let _ = std::fs::remove_file("/tmp/q.log");
                     println!("Build succeeded. Done!");
                 }
             } else {
@@ -140,14 +142,30 @@ pub async fn handle_build_release(
                 println!("Using model: \x1b[93m{}\x1b[0m", model);
                 bat_printer(&q);
                 log_question(&q).unwrap_or_else(|e| eprintln!("Failed to log question: {}", e));
-                execute_query(client, model, &q, stream).await?;
+
+                print!("\nExecute this query? (y/N): ");
+                stdout().flush()?;
+                let mut input = String::new();
+                stdin().read_line(&mut input)?;
+                if input.trim().to_lowercase().starts_with('y') {
+                    execute_query(
+                        client,
+                        model,
+                        &q,
+                        stream,
+                        true
+                    ).await?;
+                } else {
+                    println!("Query execution cancelled by user");
+                }
+                //execute_query(client, model, &q, stream, true).await?;
             }
         }
         Err(e) => {
             let q = question.unwrap_or_else(|| format!("Failed to execute build: {}", e));
             bat_printer(&q);
             log_question(&q).unwrap_or_else(|e| eprintln!("Failed to log question: {}", e));
-            execute_query(client, model, &q, stream).await?;
+            //execute_query(client, model, &q, stream, true).await?;
         }
     }
 

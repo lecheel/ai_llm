@@ -97,7 +97,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let stream = stream.or(cli.stream).unwrap_or(false);
             println!("Using model: \x1b[93m{}\x1b[0m", model);
             println!("Stream: \x1b[93m{}\x1b[0m", stream);
-            execute_query(&client, &model, &question, stream).await?;
+            execute_query(&client, &model, &question, stream, false).await?;
         }
         Some(Commands::SetDefault { model }) => {
             let new_config = Config {
@@ -119,7 +119,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Some(q) => {
                     println!("Using model: \x1b[93m{}\x1b[0m", zero_model);
                     println!("Stream: \x1b[93m{}\x1b[0m", stream);
-                    execute_query(&client, zero_model, &q, stream).await?;
+                    execute_query(&client, zero_model, &q, stream, false).await?;
                 }
                 None => {
                     interactive_mode(&client, zero_model, stream, &user_prompt, temp_dir).await?;
@@ -137,7 +137,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Some(q) => {
                     println!("Using model: \x1b[93m{}\x1b[0m", one_model);
                     println!("Stream: \x1b[93m{}\x1b[0m", stream);
-                    execute_query(&client, one_model, &q, stream).await?;
+                    execute_query(&client, one_model, &q, stream, false).await?;
                 }
                 None => {
                     interactive_mode(&client, one_model, stream, &user_prompt, temp_dir).await?;
@@ -155,7 +155,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Some(q) => {
                     println!("Using model: \x1b[93m{}\x1b[0m", two_model);
                     println!("Stream: \x1b[93m{}\x1b[0m", stream);
-                    execute_query(&client, two_model, &q, stream).await?;
+                    execute_query(&client, two_model, &q, stream, false).await?;
                 }
                 None => {
                     interactive_mode(&client, two_model, stream, &user_prompt, temp_dir).await?;

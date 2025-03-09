@@ -1,6 +1,8 @@
 use clap::{Parser, Subcommand};
 use genai::adapter::AdapterKind;
 use genai::Client;
+use std::fs::File;
+use std::io::Write;
 
 pub const DEFAULT_MODEL: &str = "gemini-2.0-flash";
 
@@ -114,6 +116,7 @@ pub async fn execute_query(
     model: &str,
     question: &str,
     stream: bool,
+    save_to_file: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     use genai::chat::printer::{print_chat_stream, PrintChatStreamOptions};
     use genai::chat::{ChatMessage, ChatRequest};
@@ -131,10 +134,27 @@ pub async fn execute_query(
             Some(&PrintChatStreamOptions::from_print_events(false)),
         )
         .await?;
+
+        // Collect streamed content if we need to save it
+        //if save_to_file {
+            //collected_content = "Streamed content collection not fully implemented".to_string();
+        //}
+
+        //if save_to_file {
+            //let mut file = File::create("/tmp/ans.md")?;
+            //file.write_all(collected_content.as_bytes())?;
+        //}
+
     } else {
         println!(" \x1b[92m󱚠 :\x1b[0m");
         let chat_res = client.exec_chat(model, chat_req, None).await?;
-        println!("{}", chat_res.content_text_as_str().unwrap_or("NO ANSWER"));
+        let content = chat_res.content_text_as_str().unwrap_or("NO ANSWER");
+        println!("{}", content);
+
+        if save_to_file {
+            let mut file = File::create("/tmp/ans.md")?;
+            file.write_all(content.as_bytes())?;
+        }
     }
     Ok(())
 }
