@@ -34,8 +34,11 @@ pub enum Commands {
     /// Run a single query and exit
     Query {
         /// The question to ask
-        #[arg(short, long)]
-        question: String,
+        #[arg(short = 'q', long = "question", group = "input")]
+        question: Option<String>,
+        /// File as input
+        #[arg(short = 'f', long = "file", group = "input")]
+        file: Option<String>,
         /// Stream responses
         #[arg(short, long)]
         stream: Option<bool>,
@@ -127,7 +130,7 @@ pub async fn execute_query(
     ]);
 
     if stream {
-        println!(" \x1b[92m󰼭 :\x1b[0m");
+        println!("\x1b[92m󰼭 :\x1b[0m");
         let chat_res = client.exec_chat_stream(model, chat_req, None).await?;
         print_chat_stream(
             chat_res,
@@ -135,18 +138,8 @@ pub async fn execute_query(
         )
         .await?;
 
-        // Collect streamed content if we need to save it
-        //if save_to_file {
-            //collected_content = "Streamed content collection not fully implemented".to_string();
-        //}
-
-        //if save_to_file {
-            //let mut file = File::create("/tmp/ans.md")?;
-            //file.write_all(collected_content.as_bytes())?;
-        //}
-
     } else {
-        println!(" \x1b[92m󱚠 :\x1b[0m");
+        println!("\x1b[92m󱚠 :\x1b[0m");
         let chat_res = client.exec_chat(model, chat_req, None).await?;
         let content = chat_res.content_text_as_str().unwrap_or("NO ANSWER");
         println!("{}", content);

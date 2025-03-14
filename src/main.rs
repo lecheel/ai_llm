@@ -20,6 +20,7 @@ use cli::{execute_query, list_models, Cli, Commands, DEFAULT_MODEL};
 use config::{load_config, save_config, Config};
 use interactive::interactive_mode;
 use std::path::Path;
+use std::fs;
 
 const BANNER: &str = r#"                   _           
       ___ ___   __| | ___ _ __  2o25
@@ -88,6 +89,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some(Commands::ListModels) => list_models(&client).await?,
         Some(Commands::Query {
             question,
+            file,
             stream,
             model,
         }) => {
@@ -97,7 +99,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let stream = stream.or(cli.stream).unwrap_or(false);
             println!("Using model: \x1b[93m{}\x1b[0m", model);
             println!("Stream: \x1b[93m{}\x1b[0m", stream);
-            execute_query(&client, &model, &question, stream, false).await?;
+
+            let actual_question = match (question, file) {
+                (Some(q), None) => {
+                    println!("Question: \x1b[93m{}\x1b[0m", q);
+                    q
+                }
+                (None, Some(file_path)) => {
+                    let content = fs::read_to_string(&file_path)
+                        .map_err(|e| anyhow::anyhow!("Failed to read file: {}", e))?;
+                    let preview = content
+                        .lines()
+                        .take(3)
+                        .collect::<Vec<&str>>()
+                        .join("\n");
+                    println!("File preview (up to 3 lines):\n\x1b[93m{}\x1b[0m", preview);
+                    content
+                },
+                (None, None) => {
+                    //eprintln!("Error: Either a question or a file must be provided.");
+                    return Err(anyhow::anyhow!("Missing input: Either a question or a file is required.").into()); // Return an error
+                },
+                (Some(_), Some(_)) => {
+                    return Err(anyhow::anyhow!("Missing input: Either a question or a file is required.").into()); // Return an error
+                }
+            };
+
+            execute_query(&client, &model, &actual_question, stream, false).await?;
         }
         Some(Commands::SetDefault { model }) => {
             let new_config = Config {
