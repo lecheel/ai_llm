@@ -16,6 +16,7 @@ pub struct Config {
     pub zero_alias: Option<String>, // Custom alias for "zero"
     pub one_alias: Option<String>,  // Custom alias for "one"
     pub two_alias: Option<String>,  // Custom alias for "two"
+    pub three_alias: Option<String>,  // Custom alias for "three"
     pub temp_dir: Option<String>,
 }
 
