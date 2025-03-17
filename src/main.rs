@@ -90,6 +90,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("{}", BANNER);
     }
 
+    // Handle the case where a direct query is provided without a subcommand
+    if cli.command.is_none() && cli.query.is_some() {
+        let question = cli.query.unwrap().join(" ");
+        let model = cli.model.unwrap_or_else(|| DEFAULT_MODEL.to_string());
+        let stream = cli.stream.or(config.stream).unwrap_or(false);
+        execute_query(&client, &model, &question, stream, false).await?;
+        return Ok(());
+    }
+
+
+
     // Handle commands
     match cli.command {
         Some(Commands::ListModels) => list_models(&client).await?,

@@ -24,6 +24,9 @@ pub struct Cli {
     pub stream: Option<bool>,
     #[command(subcommand)]
     pub command: Option<Commands>,
+    /// Positional argument for direct query
+    #[arg(value_name = "QUERY")]
+    pub query: Option<Vec<String>>,
 }
 
 #[derive(Subcommand, Debug, Clone, PartialEq, Eq)]
