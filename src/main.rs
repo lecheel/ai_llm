@@ -16,6 +16,8 @@ mod config;
 mod interactive;
 mod mic;
 mod tools;
+mod sse_event;
+mod markdown_render;
 
 use cli::{execute_query, list_models, Cli, Commands, DEFAULT_MODEL};
 use config::{load_config, save_config, Config};

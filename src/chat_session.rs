@@ -14,8 +14,11 @@ use std::fs::File;
 use std::io::{self, Write};
 use std::io::{BufReader, BufWriter};
 use std::sync::MutexGuard;
-//use crate::config::get_temp_file_path;
 
+use crate::markdown_render::MarkdownRender;
+use crate::sse_event::SseEvent;
+use tokio_stream::StreamExt;
+use tokio::sync::mpsc;
 #[derive(Serialize, Deserialize)]
 pub struct SessionState {
     messages: Vec<ChatMessage>,
@@ -76,38 +79,42 @@ impl ChatSession {
         &mut self,
         content: &str,
         client: &Client,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+        render: &mut MarkdownRender,
+    ) -> Result<mpsc::Receiver<SseEvent>, Box<dyn std::error::Error>> {
         self.messages.push(ChatMessage::user(content));
         let chat_req = ChatRequest::new(self.messages.clone());
-        let assistant_response = if self.stream {
-            let chat_stream = client.exec_chat_stream(&self.model, chat_req, None).await?;
-            let options = PrintChatStreamOptions::from_print_events(false);
-            print_chat_stream(chat_stream, Some(&options)).await?
+
+        let (tx, rx) = mpsc::channel(32);
+
+        if self.stream {
+            // Temporary workaround: use exec_chat instead of streaming
+            let chat_res = client.exec_chat(&self.model, chat_req, None).await?;
+            let response_text = chat_res.content_text_as_str().unwrap_or("NO ANSWER").to_string();
+
+            tokio::spawn(async move {
+                // Simulate streaming by sending lines incrementally
+                let lines: Vec<&str> = response_text.split('\n').collect();
+                for line in lines {
+                    let sse_event = SseEvent::Text(line.to_string());
+                    let _ = tx.send(sse_event).await;
+                    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await; // Simulate delay
+                }
+                let _ = tx.send(SseEvent::Done).await;
+            });
+
+            Ok(rx)
         } else {
             let chat_res = client.exec_chat(&self.model, chat_req, None).await?;
-            let response_text = chat_res
-                .content_text_as_str()
-                .unwrap_or("NO ANSWER")
-                .to_string();
-            let display_text = response_text.clone();
-            let mut printer = bat::PrettyPrinter::new();
-            printer
-                .language("markdown")
-                .grid(true)
-                .line_numbers(false)
-                .theme("TwoDark")
-                .input(Input::from_bytes(display_text.as_bytes()))
-                .print()?;
-            println!();
-            response_text
-        };
-        self.messages
-            .push(ChatMessage::assistant(&assistant_response));
-        //let ans_file_path = get_temp_file_path(temp_dir, "ans.md");
-        let mut file = File::create("/tmp/ans.md")?;
-        writeln!(file, "{}", assistant_response)?;
-        io::stdout().flush()?;
-        Ok(())
+            let response_text = chat_res.content_text_as_str().unwrap_or("NO ANSWER").to_string();
+            let lines: Vec<&str> = response_text.split('\n').collect();
+
+            for line in lines {
+                let output = render.render_line_mut(line);
+                println!("{}", output);
+            }
+
+            Ok(rx)
+        }
     }
 
     pub async fn handle_command(

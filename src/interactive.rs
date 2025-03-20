@@ -16,6 +16,9 @@ use tokio::task;
 use tokio::task::spawn_blocking;
 use tokio::time::{sleep, Duration};
 
+use crate::markdown_render::MarkdownRender;
+use crate::sse_event::SseEvent;
+
 pub fn write_act(act_file_path: &PathBuf) {
     if let Err(e) = fs::write(act_file_path, "busy") {
         eprintln!("Failed to write to {}: {}", act_file_path.display(), e);
@@ -78,6 +81,7 @@ pub async fn interactive_mode(
     let mic_file_path = get_temp_file_path(temp_dir, "mic.md");
 
     powerline_section_title(model, stream, None, None);
+    let mut render = MarkdownRender::new();
 
     crate::config::load_wordlist();
 
@@ -168,7 +172,20 @@ pub async fn interactive_mode(
             Some(file_content) = rx.recv() => {
                 println!("\x1b[32mResponse from machine (based on mic.md):\x1b[0m");
                 write_ai_ack(&act_file_path_clone, &ai_ack_file_path_clone);
-                session.add_message(&file_content, client).await?;
+                let mut stream = session.add_message(&file_content, client, &mut render).await?;
+                while let Some(event) = stream.recv().await {
+                    match event {
+                        SseEvent::Text(text) => {
+                            let lines: Vec<&str> = text.split('\n').collect();
+                            for line in lines {
+                                let output = render.render_line_mut(line);
+                                println!("{}", output);
+                            }
+                        }
+                        SseEvent::Done => break,
+                    }
+                }
+                //session.add_message(&file_content, client).await?;
                 None
             }
         };
@@ -186,7 +203,7 @@ pub async fn interactive_mode(
                             if !full_input.is_empty() {
                                 println!("\x1b[92m\r󰭻 Multi-line input:\x1b[0m\n{}", full_input);
                                 write_act(&act_file_path_clone);
-                                session.add_message(&full_input, client).await?;
+                                session.add_message(&full_input, client, &mut render).await?;
                                 write_ai_ack(&act_file_path_clone, &ai_ack_file_path_clone);
                             }
                         } else {
@@ -211,9 +228,24 @@ pub async fn interactive_mode(
                         }
                         println!("\x1b[92m\r󰭻 \x1b[0m: {}", last_input);
                         write_act(&act_file_path_clone);
-                        session.add_message(&last_input, client).await?;
-                        continue;
-                    }
+
+                        let mut stream = session.add_message(&last_input, client, &mut render).await?;
+                        while let Some(event) = stream.recv().await {
+                            match event {
+                                SseEvent::Text(text) => {
+                                    let lines: Vec<&str> = text.split('\n').collect();
+                                    for line in lines {
+                                        let output = render.render_line_mut(line);
+                                        println!("{}", output);
+                                    }
+                                }
+                                SseEvent::Done => break,
+                            }
+                    	}
+                        //write_ai_ack(&act_file_path_clone, &ai_ack_file_path_clone);
+			continue;
+
+	           }
                     if question == "?" {
                         if session.handle_command("?", client).await? {
                             continue;
@@ -249,7 +281,7 @@ pub async fn interactive_mode(
                             preview
                         );
                         println!("\x1b[32mMachine response:\x1b[0m");
-                        session.add_message(&content, client).await?;
+                        session.add_message(&content, client, &mut render).await?;
                         continue;
                     }
                     if question == "mic" {
@@ -271,7 +303,21 @@ pub async fn interactive_mode(
                     } else {
                         last_input = question.to_string();
                         write_act(&act_file_path_clone);
-                        session.add_message(question, client).await?;
+
+                        let mut stream = session.add_message(question, client, &mut render).await?;
+                        while let Some(event) = stream.recv().await {
+                            match event {
+                                SseEvent::Text(text) => {
+                                    let lines: Vec<&str> = text.split('\n').collect();
+                                    for line in lines {
+                                        let output = render.render_line_mut(line);
+                                        println!("{}", output);
+                                    }
+                                }
+                                SseEvent::Done => break,
+                            }
+                        }
+                        // session.add_message(question, client).await?;
                         write_ai_ack(&act_file_path_clone, &ai_ack_file_path_clone);
                     }
                 }
