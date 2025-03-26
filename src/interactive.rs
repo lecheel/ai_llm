@@ -193,7 +193,8 @@ pub async fn interactive_mode(
         if let Some(result) = readline_result {
             match result {
                 Ok(Ok(line)) => {
-                    let question = line.trim();
+                    let mut question = line.trim();
+                    let mut message_content = question.to_string();
                     if question == ":::" {
                         if multi_line_mode {
                             // End multi-line mode
@@ -284,6 +285,63 @@ pub async fn interactive_mode(
                         session.add_message(&content, client, &mut render).await?;
                         continue;
                     }
+
+                    if question.starts_with(".file") {
+                        let parts: Vec<&str> = question.splitn(2, ' ').collect();
+                        if parts.len() > 1 {
+                            let filename = parts[1];
+                            let file_path = PathBuf::from(filename);
+                            if !file_path.exists() {
+                                println!("Error: File '{}' does not exist.", filename);
+                                continue;
+                            }
+                            let file = match OpenOptions::new()
+                                .read(true)
+                                .write(true)
+                                .open(&file_path)
+                            {
+                                Ok(file) => file,
+                                Err(_) => {
+                                    println!("Error: Failed to open file '{}'.", filename);
+                                    continue;
+                                }
+                            };
+                            if file.lock_exclusive().is_err() {
+                                println!("Error: Failed to acquire lock on file '{}'.", filename);
+                                continue;
+                            }
+                            let content = match std::fs::read_to_string(&file_path) {
+                                Ok(content) => content,
+                                Err(_) => {
+                                    file.unlock().unwrap_or_else(|_| {
+                                        eprintln!("Failed to unlock file '{}'.", filename)
+                                    });
+                                    println!("Error: Failed to read file '{}'.", filename);
+                                    continue;
+                                }
+                            };
+                            if file.unlock().is_err() {
+                                eprintln!("Failed to unlock file '{}'.", filename);
+                            }
+                            let trimmed_content = content.trim();
+                            if trimmed_content.is_empty() {
+                                println!("Error: File '{}' is empty or contains only whitespace.", filename);
+                                continue;
+                            }
+                            let preview = trimmed_content.lines().take(3).collect::<Vec<_>>().join("\n");
+                            println!(
+                                "\x1b[33mPreview:\x1b[0m --- load from {} ---
+                                    \r{}",
+                                filename, preview
+                            );
+                            println!("\x1b[32mMachine response:\x1b[0m");
+                            message_content = trimmed_content.to_string();
+                        } else {
+                            println!("Usage: .file <filename>");
+                            continue;
+                        }
+                    }
+
                     if question == "mic" {
                         if session.handle_command("mic", client).await? {
                             continue;
@@ -301,24 +359,24 @@ pub async fn interactive_mode(
                             continue;
                         }
                     } else {
-                        last_input = question.to_string();
-                        write_act(&act_file_path_clone);
-
-                        let mut stream = session.add_message(question, client, &mut render).await?;
-                        while let Some(event) = stream.recv().await {
-                            match event {
-                                SseEvent::Text(text) => {
-                                    let lines: Vec<&str> = text.split('\n').collect();
-                                    for line in lines {
-                                        let output = render.render_line_mut(line);
-                                        println!("{}", output);
+                        if !message_content.trim().is_empty() {
+                            last_input = message_content.clone();
+                            write_act(&act_file_path_clone);
+                            let mut stream = session.add_message(&message_content, client, &mut render).await?;
+                            while let Some(event) = stream.recv().await {
+                                match event {
+                                    SseEvent::Text(text) => {
+                                        let lines: Vec<&str> = text.split('\n').collect();
+                                        for line in lines {
+                                            let output = render.render_line_mut(line);
+                                            println!("{}", output);
+                                        }
                                     }
+                                    SseEvent::Done => break,
                                 }
-                                SseEvent::Done => break,
                             }
+                            write_ai_ack(&act_file_path_clone, &ai_ack_file_path_clone);
                         }
-                        // session.add_message(question, client).await?;
-                        write_ai_ack(&act_file_path_clone, &ai_ack_file_path_clone);
                     }
                 }
                 Ok(Err(ReadlineError::Interrupted)) => {

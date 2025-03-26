@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-genai = "0.1.22"
+genai = "0.2.0-rc.1"
 tokio = { version = "1.27.0", features = ["full"] }
 tokio-stream = "0.1"
 clap = { version = "4.5.30", features = ["derive", "env"] }
